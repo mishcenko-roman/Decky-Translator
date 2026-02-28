@@ -109,3 +109,8 @@ export function preloadDyslexiaFonts(targetLanguage: string): void {
         loadDyslexiaFont(f).catch(() => {});
     }
 }
+
+export function cleanupDyslexiaFonts(): void {
+    document.querySelectorAll('[id^="decky-translator-cdnfont-"]').forEach(el => el.remove());
+    loadedCDNFonts.clear();
+}

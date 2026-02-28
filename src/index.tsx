@@ -22,6 +22,7 @@ import {
 import { BsTranslate } from "react-icons/bs";
 import { ImageState, ImageOverlay } from "./Overlay";
 import { GameTranslatorLogic } from "./Translator";
+import { cleanupAllFontDOM } from "./fonts";
 import { ProgressInfo } from "./Input";
 import { ActivationIndicator } from "./ActivationIndicator";
 import { SettingsProvider, useSettings } from "./SettingsContext";
@@ -299,6 +300,7 @@ export default definePlugin(() => {
         onDismount() {
             // Clean up resources
             logic.cleanup();
+            cleanupAllFontDOM();
             routerHook.removeGlobalComponent("ImageOverlay");
             routerHook.removeGlobalComponent("HoldActivationIndicator");
         },

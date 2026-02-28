@@ -96,6 +96,11 @@ export function ensureAllFontFaces(fonts: Iterable<string>): void {
     for (const f of fonts) ensureFontFaceRegistered(f);
 }
 
+export function cleanupFontFaces(): void {
+    document.getElementById(STYLE_ID)?.remove();
+    injectedFonts.clear();
+}
+
 /** Build the CSS font-family string. Pure — no side-effects. */
 export function buildTranslatedFontFamily(selectedFontFamily: string): string {
     const normalizedSelection = selectedFontFamily?.trim();

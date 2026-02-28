@@ -87,3 +87,8 @@ export function preloadWebFontList(fonts: string[]): void {
         loadGoogleFont(f).catch(() => {});
     }
 }
+
+export function cleanupWebFonts(): void {
+    document.querySelectorAll(`[id^="${GFONTS_LINK_PREFIX}"]`).forEach(el => el.remove());
+    loadedWebFonts.clear();
+}
