@@ -246,6 +246,74 @@ export class ImageState {
     }
 }
 
+// Redistribute text evenly across maxLines via binary search for minimum line width.
+// CJK (no spaces): splits by character count.
+function redistributeText(flat: string, maxLines: number): string {
+    if (maxLines <= 1 || flat.length === 0) return flat;
+
+    const hasSpaces = flat.includes(' ');
+
+    if (hasSpaces) {
+        const words = flat.split(/\s+/);
+        if (words.length <= maxLines) return words.join('\n');
+
+        // Binary search: find minimum max-line-width that fits in maxLines
+        const longestWord = Math.max(...words.map(w => w.length));
+        let lo = longestWord;
+        let hi = flat.length;
+
+        const canFit = (maxWidth: number): boolean => {
+            let lines = 1;
+            let lineLen = 0;
+            for (const word of words) {
+                if (lineLen === 0) {
+                    lineLen = word.length;
+                } else if (lineLen + 1 + word.length <= maxWidth) {
+                    lineLen += 1 + word.length;
+                } else {
+                    lines++;
+                    lineLen = word.length;
+                    if (lines > maxLines) return false;
+                }
+            }
+            return lines <= maxLines;
+        };
+
+        while (lo < hi) {
+            const mid = Math.floor((lo + hi) / 2);
+            if (canFit(mid)) {
+                hi = mid;
+            } else {
+                lo = mid + 1;
+            }
+        }
+
+        const optimalWidth = lo;
+        const lines: string[] = [];
+        let currentLine = '';
+        for (const word of words) {
+            if (currentLine.length === 0) {
+                currentLine = word;
+            } else if (currentLine.length + 1 + word.length <= optimalWidth) {
+                currentLine += ' ' + word;
+            } else {
+                lines.push(currentLine);
+                currentLine = word;
+            }
+        }
+        if (currentLine) lines.push(currentLine);
+
+        return lines.join('\n');
+    } else {
+        const charsPerLine = Math.ceil(flat.length / maxLines);
+        const lines: string[] = [];
+        for (let i = 0; i < flat.length; i += charsPerLine) {
+            lines.push(flat.slice(i, i + charsPerLine));
+        }
+        return lines.join('\n');
+    }
+}
+
 // Area-based font sizing: picks a font size so the text fills the region
 function calculateFontSize(region: TranslatedRegion, scalingFactor: number, fontScale: number): number {
     const regionWidth = (region.rect.right - region.rect.left) * scalingFactor;
@@ -478,7 +546,24 @@ export const TranslatedTextOverlay: VFC<{
 
                         return regions.map((region, index) => {
                             const fontSize = calculateFontSize(region, generalFactor, fontScale);
-                            const displayText = region.translatedText || region.text;
+                            let displayText = region.translatedText || region.text;
+
+                            // Redistribute text to fill original block height, minimising width
+                            if (allowLabelGrowth) {
+                                const lineHeight = fontSize * 1.15;
+                                const availableHeight = scaled[index].height - 4;
+                                const maxLines = Math.max(1, Math.floor(availableHeight / lineHeight));
+
+                                const flatText = displayText.replace(/\n/g, ' ').trim();
+                                if (maxLines > 1 && flatText.length > 0) {
+                                    displayText = redistributeText(flatText, maxLines);
+                                    logger.debug('Overlay',
+                                        `[Redistribute] blockH=${scaled[index].height}px fontSize=${Math.round(fontSize)}px ` +
+                                        `maxLines=${maxLines} → ${displayText.split('\n').length} lines: "${displayText}"`
+                                    );
+                                }
+                            }
+
                             const alignmentStyles =
                                 translatedTextAlignment === 'right'
                                     ? { textAlign: 'right' as const, justifyContent: 'flex-end' as const }
