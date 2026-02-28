@@ -35,6 +35,13 @@ const translatedTextAlignmentOptions = [
     { label: "Stretch", data: 'justify' }
 ];
 
+const fontStyleLabels: Record<string, string> = {
+    normal: 'Normal',
+    bold: 'Bold',
+    italic: 'Italic',
+    bolditalic: 'Bold Italic'
+};
+
 // Helper to get button labels for current input mode
 const getInputModeButtons = (mode: string): string => {
     switch (mode) {
@@ -58,7 +65,7 @@ interface TabControlsProps {
 
 export const TabControls: VFC<TabControlsProps> = ({ inputDiagnostics }) => {
     const { settings, updateSetting } = useSettings();
-    const { availableFonts, fontOptions } = useFontOptions(settings.translatedTextFontFamily);
+    const { availableFonts, fontOptions, preloadWebFonts } = useFontOptions(settings.translatedTextFontFamily);
 
     return (
         <div style={{ marginLeft: "-8px", marginRight: "-8px" }}>
@@ -180,6 +187,10 @@ export const TabControls: VFC<TabControlsProps> = ({ inputDiagnostics }) => {
                         description={`${availableFonts.length} local + ${WEB_FONTS.filter(f => !availableFonts.includes(f)).length} web fonts`}
                         rgOptions={fontOptions}
                         selectedOption={settings.translatedTextFontFamily}
+                        onMenuWillOpen={(showMenu) => {
+                            preloadWebFonts();
+                            showMenu();
+                        }}
                         onChange={(option) => {
                             const fontName = option.data;
                             if (fontName && isWebFont(fontName)) {
@@ -202,12 +213,13 @@ export const TabControls: VFC<TabControlsProps> = ({ inputDiagnostics }) => {
                         label="Translated Text Style"
                         description="Font weight and style for translated text"
                         rgOptions={[
-                            { label: "Normal", data: "normal" },
-                            { label: "Bold", data: "bold" },
-                            { label: "Italic", data: "italic" },
-                            { label: "Bold Italic", data: "bolditalic" }
+                            { label: <span>Normal</span>, data: "normal" },
+                            { label: <span style={{ fontWeight: 'bold' }}>Bold</span>, data: "bold" },
+                            { label: <span style={{ fontStyle: 'italic' }}>Italic</span>, data: "italic" },
+                            { label: <span style={{ fontWeight: 'bold', fontStyle: 'italic' }}>Bold Italic</span>, data: "bolditalic" }
                         ]}
                         selectedOption={settings.translatedTextFontStyle}
+                        renderButtonValue={() => fontStyleLabels[settings.translatedTextFontStyle] || 'Normal'}
                         onChange={(option) => updateSetting('translatedTextFontStyle', option.data, 'Text style')}
                     />
                 </PanelSectionRow>

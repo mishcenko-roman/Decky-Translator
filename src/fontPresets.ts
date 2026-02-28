@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { createElement, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { DropdownOption } from "@decky/ui";
 
 export const DEFAULT_TRANSLATED_FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
 
@@ -22,13 +23,12 @@ export function quoteFontName(fontName: string): string {
 
 // Local font families to probe for availability on the system
 export const LOCAL_FONT_CANDIDATES: string[] = [
-    'Noto Sans',
     'DejaVu Serif',
     'DejaVu Sans',
     'DejaVu Sans Mono',
     'Noto Serif',
+    'Noto Sans',
     'Noto Sans Mono',
-    'Source Code Pro',
 ];
 
 // Curated list of Google Fonts with Cyrillic + Latin-ext support.
@@ -44,7 +44,6 @@ export const WEB_FONTS: string[] = [
     'Lora',
     'Russo One',
     'Press Start 2P',
-    'Fira Code',
     'Caveat',
     'Shantell Sans',
 ];
@@ -163,6 +162,13 @@ export function loadGoogleFont(fontName: string): Promise<boolean> {
     });
 }
 
+/** Preload all web fonts so they render in the dropdown immediately. */
+export function preloadAllWebFonts(): void {
+    for (const f of WEB_FONTS) {
+        loadGoogleFont(f);
+    }
+}
+
 export function resolveTranslatedFontFamily(selectedFontFamily: string): string {
     const normalizedSelection = selectedFontFamily?.trim();
 
@@ -193,24 +199,41 @@ export function useFontOptions(selectedFontFamily: string) {
         const localSet = new Set(availableFonts);
         const webOnly = WEB_FONTS.filter(f => !localSet.has(f)).sort((a, b) => a.localeCompare(b));
 
-        const options: { label: string; data: string }[] = [
+        const styledLabel = (text: string, fontFamily: string): ReactNode =>
+            createElement('span', { style: { fontFamily: `${quoteFontName(fontFamily)}, sans-serif` } }, text);
+
+        const options: DropdownOption[] = [
             { label: "Auto (System Default)", data: "" },
         ];
 
         if (selectedFontFamily && !localSet.has(selectedFontFamily) && !webOnly.includes(selectedFontFamily)) {
-            options.push({ label: selectedFontFamily, data: selectedFontFamily });
+            options.push({ label: styledLabel(selectedFontFamily, selectedFontFamily), data: selectedFontFamily });
         }
 
-        for (const f of availableFonts) {
-            options.push({ label: f, data: f });
+        if (availableFonts.length > 0) {
+            options.push({
+                label: "Local Fonts",
+                options: availableFonts.map(f => ({ label: styledLabel(f, f), data: f })),
+            });
         }
 
-        for (const f of webOnly) {
-            options.push({ label: `\u2601\uFE0F ${f}`, data: f });
+        if (webOnly.length > 0) {
+            options.push({
+                label: "Web Fonts",
+                options: webOnly.map(f => ({ label: styledLabel(f, f), data: f })),
+            });
         }
 
         return options;
     }, [availableFonts, selectedFontFamily]);
 
-    return { availableFonts, fontOptions };
+    const preloadedRef = useRef(false);
+    const preloadWebFonts = useCallback(() => {
+        if (!preloadedRef.current) {
+            preloadedRef.current = true;
+            preloadAllWebFonts();
+        }
+    }, []);
+
+    return { availableFonts, fontOptions, preloadWebFonts };
 }
