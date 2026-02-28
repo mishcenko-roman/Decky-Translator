@@ -32,7 +32,7 @@ export const LOCAL_FONT_CANDIDATES: string[] = [
 ];
 
 // Curated list of Google Fonts with Cyrillic + Latin-ext support.
-// Loaded on demand from fonts.googleapis.com when selected.
+// Used as the default for Latin/Cyrillic languages.
 export const WEB_FONTS: string[] = [
     'Open Sans',
     'Montserrat',
@@ -48,10 +48,29 @@ export const WEB_FONTS: string[] = [
     'Shantell Sans',
 ];
 
-const webFontSet = new Set(WEB_FONTS);
+// Language-specific web font lists for scripts that need dedicated fonts.
+// Each entry maps a target language code to its own curated list.
+export const LANGUAGE_WEB_FONTS: Record<string, string[]> = {
+    ja: ['Potta One', 'Hachi Maru Pop', 'Yuji Mai', 'DotGothic16', 'Zen Antique'], // Japanese
+    ko: ['Gamja Flower', 'Jua', 'Song Myung'], // Korean
+    'zh-CN': ['Noto Serif Simplified Chinese', 'ZCOOL QingKe HuangYou', 'Long Cang'], // Chinese Simplified
+    'zh-TW': ['Noto Serif Traditional Chinese', 'Potta One', 'DotGothic16'], // Chinese Traditional
+    th: ['Noto Serif Thai', 'Playpen Sans Thai', 'Itim'], // Thai
+    hi: ['Noto Serif Devanagari', 'Kalam', 'Kurale'], // Hindi
+    ar: ['Noto Nastaliq Urdu', 'Changa', 'Rakkas'], // Arabic
+    el: ['Open Sans', 'Roboto Slab', 'Press Start 2P', 'Playpen Sans'], // Greek
+};
 
+/** Return the web font list appropriate for the given target language. */
+export function getWebFontsForLanguage(targetLanguage: string): string[] {
+    return LANGUAGE_WEB_FONTS[targetLanguage] ?? WEB_FONTS;
+}
+
+const allWebFontSet = new Set<string>([...WEB_FONTS, ...Object.values(LANGUAGE_WEB_FONTS).flat()]);
+
+/** Check whether the font is a web font (in any language list). */
 export function isWebFont(fontName: string): boolean {
-    return webFontSet.has(fontName);
+    return allWebFontSet.has(fontName);
 }
 
 /** Canvas-based font detection: compares pixel widths with a known fallback. */
@@ -135,7 +154,7 @@ export function loadGoogleFont(fontName: string): Promise<boolean> {
     const link = document.createElement('link');
     link.id = id;
     link.rel = 'stylesheet';
-    link.href = `https://fonts.googleapis.com/css2?family=${familyParam}:wght@400;700&subset=cyrillic,latin,latin-ext&display=swap`;
+    link.href = `https://fonts.googleapis.com/css2?family=${familyParam}:wght@400;700&display=swap`;
     document.head.appendChild(link);
 
     return new Promise<boolean>((resolve) => {
@@ -162,9 +181,9 @@ export function loadGoogleFont(fontName: string): Promise<boolean> {
     });
 }
 
-/** Preload all web fonts so they render in the dropdown immediately. */
-export function preloadAllWebFonts(): void {
-    for (const f of WEB_FONTS) {
+/** Preload web fonts for the given list so they render in the dropdown immediately. */
+export function preloadWebFontList(fonts: string[]): void {
+    for (const f of fonts) {
         loadGoogleFont(f);
     }
 }
@@ -186,7 +205,7 @@ export function resolveTranslatedFontFamily(selectedFontFamily: string): string 
 }
 
 /** Hook that detects local/web fonts and builds a dropdown options list. */
-export function useFontOptions(selectedFontFamily: string) {
+export function useFontOptions(selectedFontFamily: string, targetLanguage: string, onFontReset?: () => void) {
     const [availableFonts, setAvailableFonts] = useState<string[]>([]);
 
     useEffect(() => {
@@ -195,9 +214,11 @@ export function useFontOptions(selectedFontFamily: string) {
         setAvailableFonts(Array.from(detected).sort((a, b) => a.localeCompare(b)));
     }, []);
 
+    const webFonts = useMemo(() => getWebFontsForLanguage(targetLanguage), [targetLanguage]);
+
     const fontOptions = useMemo(() => {
         const localSet = new Set(availableFonts);
-        const webOnly = WEB_FONTS.filter(f => !localSet.has(f)).sort((a, b) => a.localeCompare(b));
+        const webOnly = webFonts.filter(f => !localSet.has(f)).sort((a, b) => a.localeCompare(b));
 
         const styledLabel = (text: string, fontFamily: string): ReactNode =>
             createElement('span', { style: { fontFamily: `${quoteFontName(fontFamily)}, sans-serif` } }, text);
@@ -225,15 +246,25 @@ export function useFontOptions(selectedFontFamily: string) {
         }
 
         return options;
-    }, [availableFonts, selectedFontFamily]);
+    }, [availableFonts, selectedFontFamily, webFonts]);
 
-    const preloadedRef = useRef(false);
-    const preloadWebFonts = useCallback(() => {
-        if (!preloadedRef.current) {
-            preloadedRef.current = true;
-            preloadAllWebFonts();
+    // Reset font to Auto when target language changes and current font is not in the new list
+    const prevLangRef = useRef(targetLanguage);
+    useEffect(() => {
+        if (prevLangRef.current === targetLanguage) return;
+        prevLangRef.current = targetLanguage;
+        if (selectedFontFamily && !webFonts.includes(selectedFontFamily) && !availableFonts.includes(selectedFontFamily)) {
+            onFontReset?.();
         }
-    }, []);
+    }, [targetLanguage]);
 
-    return { availableFonts, fontOptions, preloadWebFonts };
+    const preloadedLangRef = useRef<string>('');
+    const preloadWebFonts = useCallback(() => {
+        if (preloadedLangRef.current !== targetLanguage) {
+            preloadedLangRef.current = targetLanguage;
+            preloadWebFontList(getWebFontsForLanguage(targetLanguage));
+        }
+    }, [targetLanguage]);
+
+    return { availableFonts, webFonts, fontOptions, preloadWebFonts };
 }

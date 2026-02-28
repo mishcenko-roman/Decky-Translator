@@ -12,7 +12,7 @@ import {
 import { VFC } from "react";
 import { useSettings } from "../SettingsContext";
 import { InputMode } from "../Input";
-import { WEB_FONTS, isWebFont, loadGoogleFont, useFontOptions } from "../fontPresets";
+import { isWebFont, loadGoogleFont, useFontOptions } from "../fontPresets";
 
 // Input mode options for dropdown
 const inputModeOptions = [
@@ -65,7 +65,11 @@ interface TabControlsProps {
 
 export const TabControls: VFC<TabControlsProps> = ({ inputDiagnostics }) => {
     const { settings, updateSetting } = useSettings();
-    const { availableFonts, fontOptions, preloadWebFonts } = useFontOptions(settings.translatedTextFontFamily);
+    const { availableFonts, webFonts, fontOptions, preloadWebFonts } = useFontOptions(
+        settings.translatedTextFontFamily,
+        settings.targetLanguage,
+        () => updateSetting('translatedTextFontFamily', '', 'Text font'),
+    );
 
     return (
         <div style={{ marginLeft: "-8px", marginRight: "-8px" }}>
@@ -184,7 +188,7 @@ export const TabControls: VFC<TabControlsProps> = ({ inputDiagnostics }) => {
                 <PanelSectionRow>
                     <DropdownItem
                         label="Translated Text Font"
-                        description={`${availableFonts.length} local + ${WEB_FONTS.filter(f => !availableFonts.includes(f)).length} web fonts`}
+                        description={`${availableFonts.length} local + ${webFonts.filter(f => !availableFonts.includes(f)).length} web fonts`}
                         rgOptions={fontOptions}
                         selectedOption={settings.translatedTextFontFamily}
                         onMenuWillOpen={(showMenu) => {
