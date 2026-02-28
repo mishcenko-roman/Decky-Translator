@@ -12,7 +12,7 @@ import {
 import { VFC } from "react";
 import { useSettings } from "../SettingsContext";
 import { InputMode } from "../Input";
-import { isWebFont, loadGoogleFont, useFontOptions } from "../fontPresets";
+import { useFontOptions, isRemoteFont, loadRemoteFont } from "../fonts";
 
 // Input mode options for dropdown
 const inputModeOptions = [
@@ -65,7 +65,7 @@ interface TabControlsProps {
 
 export const TabControls: VFC<TabControlsProps> = ({ inputDiagnostics }) => {
     const { settings, updateSetting } = useSettings();
-    const { availableFonts, webFonts, fontOptions, preloadWebFonts } = useFontOptions(
+    const { fontOptions, fontDescription, preloadWebFonts } = useFontOptions(
         settings.translatedTextFontFamily,
         settings.targetLanguage,
         () => updateSetting('translatedTextFontFamily', '', 'Text font'),
@@ -188,7 +188,7 @@ export const TabControls: VFC<TabControlsProps> = ({ inputDiagnostics }) => {
                 <PanelSectionRow>
                     <DropdownItem
                         label="Translated Text Font"
-                        description={`${availableFonts.length} local + ${webFonts.filter(f => !availableFonts.includes(f)).length} web fonts`}
+                        description={fontDescription}
                         rgOptions={fontOptions}
                         selectedOption={settings.translatedTextFontFamily}
                         onMenuWillOpen={(showMenu) => {
@@ -197,10 +197,10 @@ export const TabControls: VFC<TabControlsProps> = ({ inputDiagnostics }) => {
                         }}
                         onChange={(option) => {
                             const fontName = option.data;
-                            if (fontName && isWebFont(fontName)) {
+                            if (fontName && isRemoteFont(fontName)) {
                                 const previousFont = settings.translatedTextFontFamily;
                                 updateSetting('translatedTextFontFamily', fontName, 'Text font');
-                                loadGoogleFont(fontName).then((ok) => {
+                                loadRemoteFont(fontName).then((ok) => {
                                     if (!ok) {
                                         updateSetting('translatedTextFontFamily', previousFont, 'Text font');
                                     }

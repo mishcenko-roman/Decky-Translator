@@ -1,5 +1,7 @@
-import { createElement, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DropdownOption } from "@decky/ui";
+import { createElement, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { isDyslexiaFont, getDyslexiaFontsForLanguage, loadDyslexiaFont, preloadDyslexiaFonts } from "./dyslexiaFonts";
+import { getWebFontsForLanguage, isWebFont, loadGoogleFont, preloadWebFontList } from "./webFonts";
 
 export const DEFAULT_TRANSLATED_FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
 
@@ -12,7 +14,6 @@ const FONT_STYLE_CSS: Record<FontStyleOption, { fontWeight: string; fontStyle: s
     bolditalic: { fontWeight: '700', fontStyle: 'italic' },
 };
 
-/** Resolve FontStyleOption into CSS fontWeight + fontStyle values. */
 export function resolveFontStyleCSS(style: FontStyleOption) {
     return FONT_STYLE_CSS[style] || FONT_STYLE_CSS.normal;
 }
@@ -21,7 +22,6 @@ export function quoteFontName(fontName: string): string {
     return `'${fontName.replace(/'/g, "\\'")}'`;
 }
 
-// Local font families to probe for availability on the system
 export const LOCAL_FONT_CANDIDATES: string[] = [
     'DejaVu Serif',
     'DejaVu Sans',
@@ -30,48 +30,6 @@ export const LOCAL_FONT_CANDIDATES: string[] = [
     'Noto Sans',
     'Noto Sans Mono',
 ];
-
-// Curated list of Google Fonts with Cyrillic + Latin-ext support.
-// Used as the default for Latin/Cyrillic languages.
-export const WEB_FONTS: string[] = [
-    'Open Sans',
-    'Montserrat',
-    'Nunito',
-    'Raleway',
-    'Exo 2',
-    'Roboto Slab',
-    'Merriweather',
-    'Lora',
-    'Russo One',
-    'Press Start 2P',
-    'Caveat',
-    'Shantell Sans',
-];
-
-// Language-specific web font lists for scripts that need dedicated fonts.
-// Each entry maps a target language code to its own curated list.
-export const LANGUAGE_WEB_FONTS: Record<string, string[]> = {
-    ja: ['Potta One', 'Hachi Maru Pop', 'Yuji Mai', 'DotGothic16', 'Zen Antique'], // Japanese
-    ko: ['Gamja Flower', 'Jua', 'Song Myung'], // Korean
-    'zh-CN': ['Noto Serif Simplified Chinese', 'ZCOOL QingKe HuangYou', 'Long Cang'], // Chinese Simplified
-    'zh-TW': ['Noto Serif Traditional Chinese', 'Potta One', 'DotGothic16'], // Chinese Traditional
-    th: ['Noto Serif Thai', 'Playpen Sans Thai', 'Itim'], // Thai
-    hi: ['Noto Serif Devanagari', 'Kalam', 'Kurale'], // Hindi
-    ar: ['Noto Nastaliq Urdu', 'Changa', 'Rakkas'], // Arabic
-    el: ['Open Sans', 'Roboto Slab', 'Press Start 2P', 'Playpen Sans'], // Greek
-};
-
-/** Return the web font list appropriate for the given target language. */
-export function getWebFontsForLanguage(targetLanguage: string): string[] {
-    return LANGUAGE_WEB_FONTS[targetLanguage] ?? WEB_FONTS;
-}
-
-const allWebFontSet = new Set<string>([...WEB_FONTS, ...Object.values(LANGUAGE_WEB_FONTS).flat()]);
-
-/** Check whether the font is a web font (in any language list). */
-export function isWebFont(fontName: string): boolean {
-    return allWebFontSet.has(fontName);
-}
 
 /** Canvas-based font detection: compares pixel widths with a known fallback. */
 function isFontAvailableCanvas(fontName: string): boolean {
@@ -107,6 +65,7 @@ export function detectAvailableFonts(fontCandidates: string[]): Set<string> {
     }
     return detected;
 }
+
 // Steam's CEF may not expose system fonts unless they are explicitly
 // declared through @font-face with a local() src.
 
@@ -137,74 +96,27 @@ export function ensureAllFontFaces(fonts: Iterable<string>): void {
     for (const f of fonts) ensureFontFaceRegistered(f);
 }
 
-const GFONTS_LINK_PREFIX = 'decky-translator-gfont-';
-const loadedWebFonts = new Set<string>();
-
-/** Load a Google Font by injecting a <link> stylesheet. */
-export function loadGoogleFont(fontName: string): Promise<boolean> {
-    if (loadedWebFonts.has(fontName)) return Promise.resolve(true);
-
-    const id = GFONTS_LINK_PREFIX + fontName.replace(/\s+/g, '-');
-    if (document.getElementById(id)) {
-        loadedWebFonts.add(fontName);
-        return Promise.resolve(true);
-    }
-
-    const familyParam = fontName.replace(/\s+/g, '+');
-    const link = document.createElement('link');
-    link.id = id;
-    link.rel = 'stylesheet';
-    link.href = `https://fonts.googleapis.com/css2?family=${familyParam}:wght@400;700&display=swap`;
-    document.head.appendChild(link);
-
-    return new Promise<boolean>((resolve) => {
-        let settled = false;
-        const finish = (ok: boolean) => {
-            if (settled) return;
-            settled = true;
-            if (ok) {
-                loadedWebFonts.add(fontName);
-            } else {
-                link.remove();
-            }
-            resolve(ok);
-        };
-        link.onload = () => {
-            if (document.fonts?.ready) {
-                document.fonts.ready.then(() => finish(true));
-            } else {
-                setTimeout(() => finish(true), 500);
-            }
-        };
-        link.onerror = () => finish(false);
-        setTimeout(() => finish(false), 6000);
-    });
-}
-
-/** Preload web fonts for the given list so they render in the dropdown immediately. */
-export function preloadWebFontList(fonts: string[]): void {
-    for (const f of fonts) {
-        loadGoogleFont(f);
-    }
-}
-
-export function resolveTranslatedFontFamily(selectedFontFamily: string): string {
+/** Build the CSS font-family string. Pure — no side-effects. */
+export function buildTranslatedFontFamily(selectedFontFamily: string): string {
     const normalizedSelection = selectedFontFamily?.trim();
-
-    if (!normalizedSelection) {
-        return DEFAULT_TRANSLATED_FONT_FAMILY;
-    }
-
-    if (isWebFont(normalizedSelection)) {
-        loadGoogleFont(normalizedSelection);
-    } else {
-        ensureFontFaceRegistered(normalizedSelection);
-    }
-
+    if (!normalizedSelection) return DEFAULT_TRANSLATED_FONT_FAMILY;
     return `${quoteFontName(normalizedSelection)}, ${DEFAULT_TRANSLATED_FONT_FAMILY}`;
 }
 
-/** Hook that detects local/web fonts and builds a dropdown options list. */
+/** Ensure the selected font is loaded (network / DOM injection). Fire-and-forget. */
+export function ensureFontLoaded(selectedFontFamily: string): void {
+    const normalizedSelection = selectedFontFamily?.trim();
+    if (!normalizedSelection) return;
+
+    if (isDyslexiaFont(normalizedSelection)) {
+        loadDyslexiaFont(normalizedSelection).catch(() => {});
+    } else if (isWebFont(normalizedSelection)) {
+        loadGoogleFont(normalizedSelection).catch(() => {});
+    } else {
+        ensureFontFaceRegistered(normalizedSelection);
+    }
+}
+
 export function useFontOptions(selectedFontFamily: string, targetLanguage: string, onFontReset?: () => void) {
     const [availableFonts, setAvailableFonts] = useState<string[]>([]);
 
@@ -215,10 +127,12 @@ export function useFontOptions(selectedFontFamily: string, targetLanguage: strin
     }, []);
 
     const webFonts = useMemo(() => getWebFontsForLanguage(targetLanguage), [targetLanguage]);
+    const dyslexiaFonts = useMemo(() => getDyslexiaFontsForLanguage(targetLanguage), [targetLanguage]);
 
     const fontOptions = useMemo(() => {
         const localSet = new Set(availableFonts);
-        const webOnly = webFonts.filter(f => !localSet.has(f)).sort((a, b) => a.localeCompare(b));
+        const dyslexiaSet = new Set(dyslexiaFonts);
+        const webOnly = webFonts.filter(f => !localSet.has(f) && !dyslexiaSet.has(f)).sort((a, b) => a.localeCompare(b));
 
         const styledLabel = (text: string, fontFamily: string): ReactNode =>
             createElement('span', { style: { fontFamily: `${quoteFontName(fontFamily)}, sans-serif` } }, text);
@@ -227,7 +141,7 @@ export function useFontOptions(selectedFontFamily: string, targetLanguage: strin
             { label: "Auto (System Default)", data: "" },
         ];
 
-        if (selectedFontFamily && !localSet.has(selectedFontFamily) && !webOnly.includes(selectedFontFamily)) {
+        if (selectedFontFamily && !localSet.has(selectedFontFamily) && !webOnly.includes(selectedFontFamily) && !dyslexiaSet.has(selectedFontFamily)) {
             options.push({ label: styledLabel(selectedFontFamily, selectedFontFamily), data: selectedFontFamily });
         }
 
@@ -235,6 +149,13 @@ export function useFontOptions(selectedFontFamily: string, targetLanguage: strin
             options.push({
                 label: "Local Fonts",
                 options: availableFonts.map(f => ({ label: styledLabel(f, f), data: f })),
+            });
+        }
+
+        if (dyslexiaFonts.length > 0) {
+            options.push({
+                label: "Dyslexia-Friendly",
+                options: dyslexiaFonts.map(f => ({ label: styledLabel(f, f), data: f })),
             });
         }
 
@@ -246,16 +167,17 @@ export function useFontOptions(selectedFontFamily: string, targetLanguage: strin
         }
 
         return options;
-    }, [availableFonts, selectedFontFamily, webFonts]);
+    }, [availableFonts, selectedFontFamily, webFonts, dyslexiaFonts]);
 
     // Reset font to Auto when target language changes and current font is not in the new list
     const prevLangRef = useRef(targetLanguage);
     useEffect(() => {
         if (prevLangRef.current === targetLanguage) return;
         prevLangRef.current = targetLanguage;
-        if (selectedFontFamily && !webFonts.includes(selectedFontFamily) && !availableFonts.includes(selectedFontFamily)) {
+        if (selectedFontFamily && !webFonts.includes(selectedFontFamily) && !availableFonts.includes(selectedFontFamily) && !dyslexiaFonts.includes(selectedFontFamily)) {
             onFontReset?.();
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally runs only on language change
     }, [targetLanguage]);
 
     const preloadedLangRef = useRef<string>('');
@@ -263,8 +185,26 @@ export function useFontOptions(selectedFontFamily: string, targetLanguage: strin
         if (preloadedLangRef.current !== targetLanguage) {
             preloadedLangRef.current = targetLanguage;
             preloadWebFontList(getWebFontsForLanguage(targetLanguage));
+            preloadDyslexiaFonts(targetLanguage);
         }
     }, [targetLanguage]);
 
-    return { availableFonts, webFonts, fontOptions, preloadWebFonts };
+    const fontDescription = useMemo(() => {
+        const webCount = webFonts.filter(f => !availableFonts.includes(f)).length;
+        return `${availableFonts.length} local + ${webCount} web`
+            + (dyslexiaFonts.length > 0 ? ` + ${dyslexiaFonts.length} dyslexia` : '')
+            + ' fonts';
+    }, [availableFonts, webFonts, dyslexiaFonts]);
+
+    return { availableFonts, webFonts, dyslexiaFonts, fontOptions, fontDescription, preloadWebFonts };
+}
+
+export function isRemoteFont(fontName: string): boolean {
+    return isWebFont(fontName) || isDyslexiaFont(fontName);
+}
+
+export function loadRemoteFont(fontName: string): Promise<boolean> {
+    if (isDyslexiaFont(fontName)) return loadDyslexiaFont(fontName);
+    if (isWebFont(fontName)) return loadGoogleFont(fontName);
+    return Promise.resolve(false);
 }

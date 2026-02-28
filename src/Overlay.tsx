@@ -6,8 +6,8 @@ import { findModuleChild } from "@decky/ui";
 import { VFC, useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { TranslatedRegion } from "./TextTranslator";
 import { logger } from "./Logger";
-import { resolveTranslatedFontFamily, resolveFontStyleCSS } from "./fontPresets";
-import type { FontStyleOption } from "./fontPresets";
+import { buildTranslatedFontFamily, ensureFontLoaded, resolveFontStyleCSS } from "./fonts";
+import type { FontStyleOption } from "./fonts";
 
 export type HorizontalTextAlignment = 'left' | 'right' | 'center' | 'justify';
 
@@ -372,9 +372,15 @@ export const TranslatedTextOverlay: VFC<{
     // State to track the natural (original) image dimensions from the screenshot
     const [naturalDimensions, setNaturalDimensions] = useState({ width: 1280, height: 800 });
 
+    // Load font as a side-effect (network request / DOM injection)
+    useEffect(() => {
+        ensureFontLoaded(translatedTextFontFamily);
+    }, [translatedTextFontFamily]);
+
+    // Pure computation — no side-effects
     const translatedOverlayFontFamily = useMemo(
         () => {
-            const resolved = resolveTranslatedFontFamily(translatedTextFontFamily);
+            const resolved = buildTranslatedFontFamily(translatedTextFontFamily);
             logger.debug('Overlay', `Font resolved: "${translatedTextFontFamily}" → "${resolved}"`);
             return resolved;
         },
