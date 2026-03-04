@@ -375,6 +375,46 @@ export const TranslatedTextOverlay: VFC<{
     // Track when the selected font is ready to force a repaint
     const fontReady = useFontReady(translatedTextFontFamily);
 
+    // Screenshot fade-in: double rAF guarantees a real browser reflow between
+    // clearing opacity and restoring it, so the CSS transition always fires.
+    const prevImageDataRef = useRef<string>("");
+    const [screenshotVisible, setScreenshotVisible] = useState<boolean>(true);
+
+    useEffect(() => {
+        if (!imageData) {
+            prevImageDataRef.current = "";
+            setScreenshotVisible(false);
+            return;
+        }
+        if (imageData === prevImageDataRef.current) return;
+
+        prevImageDataRef.current = imageData;
+        setScreenshotVisible(false);
+        // Two nested rAFs ensure the browser has committed the opacity:0 paint
+        // before we flip back to 1, so the CSS transition reliably fires.
+        let raf1: number | null = null;
+        let raf2: number | null = null;
+        raf1 = requestAnimationFrame(() => {
+            raf2 = requestAnimationFrame(() => setScreenshotVisible(true));
+        });
+        return () => {
+            if (raf1 !== null) cancelAnimationFrame(raf1);
+            if (raf2 !== null) cancelAnimationFrame(raf2);
+        };
+    }, [imageData]);
+
+    // Region epoch: bumping the key on each new translation batch forces React
+    // to unmount/remount text boxes, retriggering the fade-in animation.
+    // We skip empty arrays to avoid resetting the epoch when the overlay clears.
+    const [regionEpoch, setRegionEpoch] = useState<number>(0);
+    const prevRegionsRef = useRef<TranslatedRegion[]>([]);
+    useEffect(() => {
+        if (regions.length > 0 && regions !== prevRegionsRef.current) {
+            prevRegionsRef.current = regions;
+            setRegionEpoch(e => e + 1);
+        }
+    }, [regions]);
+
     // Pure computation — no side-effects
     const translatedOverlayFontFamily = useMemo(
         () => {
@@ -480,6 +520,13 @@ export const TranslatedTextOverlay: VFC<{
                  opacity: visible ? 1 : 0,
                  pointerEvents: visible ? "auto" : "none",
              }}>
+            {/* Always-present keyframes — must be outside loading block so animation works after loading ends */}
+            <style>{`
+                @keyframes fadeInTranslation {
+                    0%   { opacity: 0; }
+                    100% { opacity: 1; }
+                }
+            `}</style>
 
             {/* Screenshot with Translations */}
             {imageData && (
@@ -499,7 +546,9 @@ export const TranslatedTextOverlay: VFC<{
                             objectFit: "contain",
                             backgroundColor: "rgba(0, 0, 0, 0.15)",
                             border: translationsVisible ? "1px solid #f44336" : "1px solid #ffc107",
-                            imageRendering: "pixelated"
+                            imageRendering: "pixelated",
+                            opacity: screenshotVisible ? 1 : 0,
+                            transition: "opacity 0.3s ease-in-out",
                         }}
                         alt="Screenshot"
                     />
@@ -549,6 +598,7 @@ export const TranslatedTextOverlay: VFC<{
                         });
 
                         return regions.map((region, index) => {
+                            const stableRegionKey = `${region.rect.left}-${region.rect.top}-${region.rect.right}-${region.rect.bottom}-${region.text}-${region.translatedText}`;
                             const fontSize = calculateFontSize(region, generalFactor, fontScale);
                             let displayText = region.translatedText || region.text;
 
@@ -611,7 +661,7 @@ export const TranslatedTextOverlay: VFC<{
 
                             return (
                                 <div
-                                    key={index}
+                                    key={`${regionEpoch}-${stableRegionKey}`}
                                     style={{
                                         position: "absolute",
                                         display: 'flex',
@@ -624,6 +674,18 @@ export const TranslatedTextOverlay: VFC<{
                                             ? { width: 'max-content', maxWidth: `${labelMaxWidth}px` }
                                             : { maxWidth: `${labelMaxWidth}px` }),
                                         minHeight: `${scaled[index].height}px`,
+                                        boxSizing: 'border-box',
+                                    }}
+                                >
+                                    {/* Visual layer: separated from the positioning wrapper above
+                                      * so that border-radius and animation apply only to the
+                                      * visible bubble, not to the invisible hit-area container. */}
+                                    <div style={{
+                                        width: '100%',
+                                        minHeight: `${scaled[index].height}px`,
+                                        display: 'flex',
+                                        justifyContent: alignmentStyles.justifyContent,
+                                        alignItems: 'center',
                                         boxSizing: 'border-box',
 
                                         backgroundColor: "rgba(0, 0, 0, 0.8)",
@@ -641,14 +703,14 @@ export const TranslatedTextOverlay: VFC<{
                                         whiteSpace: "pre-wrap",
 
                                         animation: "fadeInTranslation 0.2s ease-out forwards"
-                                    }}
-                                >
-                                    <div style={{
-                                        width: '100%',
-                                        textAlign: alignmentStyles.textAlign,
-                                        textAlignLast: translatedTextAlignment === 'justify' ? 'justify' : alignmentStyles.textAlign,
                                     }}>
-                                        {displayText}
+                                        <div style={{
+                                            width: '100%',
+                                            textAlign: alignmentStyles.textAlign,
+                                            textAlignLast: translatedTextAlignment === 'justify' ? 'justify' : alignmentStyles.textAlign,
+                                        }}>
+                                            {displayText}
+                                        </div>
                                     </div>
                                 </div>
                             );
@@ -720,10 +782,6 @@ export const TranslatedTextOverlay: VFC<{
                         @keyframes spin {
                             0% { transform: rotate(0deg); }
                             100% { transform: rotate(360deg); }
-                        }
-                        @keyframes fadeInTranslation {
-                            0% { opacity: 0; transform: translateY(10px); }
-                            100% { opacity: 1; transform: translateY(0); }
                         }
                     `}</style>
                     <div style={{ fontSize: "14px", whiteSpace: "nowrap" }}>
