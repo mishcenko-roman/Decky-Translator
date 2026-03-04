@@ -1,4 +1,6 @@
 import { loadGoogleFont, injectStylesheetLink, GOOGLE_FONT_TIMEOUT_MS } from "./webFonts";
+import { loadFontFromCache, cacheFontToDisk, isAutoCacheEnabled } from "./fontCache";
+import { logger } from "../Logger";
 
 interface DyslexiaFontDef {
     name: string;
@@ -80,37 +82,69 @@ export function getDyslexiaFontsForLanguage(targetLanguage: string): string[] {
 const CDN_FONT_TIMEOUT_MS = GOOGLE_FONT_TIMEOUT_MS + 2000;
 const loadedCDNFonts = new Set<string>();
 
-export function loadCDNFont(fontName: string): Promise<boolean> {
+interface LoadDyslexiaFontOptions {
+    allowAutoCache?: boolean;
+}
+
+export function loadCDNFont(fontName: string, options: LoadDyslexiaFontOptions = {}): Promise<boolean> {
+    const shouldAutoCache = options.allowAutoCache ?? true;
     if (loadedCDNFonts.has(fontName)) return Promise.resolve(true);
 
     const def = dyslexiaFontMap.get(fontName);
     if (!def || def.source !== 'cdn' || !def.cdnCssUrls?.length) return Promise.resolve(false);
 
-    const promises = def.cdnCssUrls.map((cssUrl, i) => {
-        const id = `decky-translator-cdnfont-${fontName.replace(/\s+/g, '-')}-${i}`;
-        return injectStylesheetLink(id, cssUrl, CDN_FONT_TIMEOUT_MS);
-    });
-
-    return Promise.allSettled(promises).then(results => {
-        const ok = results.every(r => r.status === 'fulfilled' && r.value);
-        if (ok) loadedCDNFonts.add(fontName);
-        return ok;
+    // Try persistent disk cache first.
+    return loadFontFromCache(fontName).then(cached => {
+        if (cached) {
+            logger.debug('DyslexiaFonts', `Font "${fontName}" loaded from disk cache`);
+            loadedCDNFonts.add(fontName);
+            return true;
+        }
+        logger.debug('DyslexiaFonts', `Font "${fontName}" not in cache, trying CDN...`);
+        const promises = def.cdnCssUrls!.map((cssUrl, i) => {
+            const id = `decky-translator-cdnfont-${fontName.replace(/\s+/g, '-')}-${i}`;
+            return injectStylesheetLink(id, cssUrl, CDN_FONT_TIMEOUT_MS);
+        });
+        return Promise.allSettled(promises).then(results => {
+            const ok = results.every(r => r.status === 'fulfilled' && r.value);
+            if (ok) {
+                loadedCDNFonts.add(fontName);
+                if (shouldAutoCache && isAutoCacheEnabled()) cacheFontToDisk(fontName, def.cdnCssUrls!).catch(() => {});
+            } else {
+                logger.debug('DyslexiaFonts', `Font "${fontName}" failed to load from CDN`);
+            }
+            return ok;
+        });
     });
 }
 
-export function loadDyslexiaFont(fontName: string): Promise<boolean> {
+export function loadDyslexiaFont(fontName: string, options: LoadDyslexiaFontOptions = {}): Promise<boolean> {
     const def = dyslexiaFontMap.get(fontName);
     if (!def) return Promise.resolve(false);
-    return def.source === 'google' ? loadGoogleFont(fontName) : loadCDNFont(fontName);
+    return def.source === 'google' ? loadGoogleFont(fontName, options) : loadCDNFont(fontName, options);
+}
+
+/** Return the CSS URLs needed to cache a dyslexia font, or undefined if unknown. */
+export function getDyslexiaCssUrls(fontName: string): string[] | undefined {
+    const def = dyslexiaFontMap.get(fontName);
+    if (!def) return undefined;
+    if (def.source === 'cdn' && def.cdnCssUrls?.length) return def.cdnCssUrls;
+    const familyParam = fontName.replace(/\s+/g, '+');
+    return [`https://fonts.googleapis.com/css2?family=${familyParam}:wght@400;700&display=swap`];
 }
 
 export function preloadDyslexiaFonts(targetLanguage: string): void {
     for (const f of getDyslexiaFontsForLanguage(targetLanguage)) {
-        loadDyslexiaFont(f).catch(() => {});
+        loadDyslexiaFont(f, { allowAutoCache: false }).catch(() => {});
     }
 }
 
 export function cleanupDyslexiaFonts(): void {
     document.querySelectorAll('[id^="decky-translator-cdnfont-"]').forEach(el => el.remove());
+    loadedCDNFonts.clear();
+}
+
+/** Reset in-memory loaded state without touching DOM nodes. */
+export function resetLoadedDyslexiaFontsMemory(): void {
     loadedCDNFonts.clear();
 }
