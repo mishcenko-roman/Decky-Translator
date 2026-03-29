@@ -81,8 +81,6 @@ import requests
 
 # Import provider system
 from providers import ProviderManager, TextRegion, NetworkError, ApiKeyError, RateLimitError
-from providers.font_cache_service import FontCacheService
-from providers.font_cache_mixin import FontCacheMixin
 
 _processing_lock = False
 
@@ -852,7 +850,7 @@ def get_base64_image(image_path):
         return ""
 
 
-class Plugin(FontCacheMixin):
+class Plugin:
     _filepath: str = None
     _screenshotPath: str = "/tmp/decky-translator"  # Temporary directory for screenshots (deleted after OCR)
     _settings = None
@@ -877,7 +875,6 @@ class Plugin(FontCacheMixin):
     _use_free_providers: bool = True  # Default to free providers (no API key needed)
     _ocr_provider: str = "rapidocr"  # "rapidocr" (RapidOCR), "ocrspace" (OCR.space), or "googlecloud" (Google Cloud)
     _translation_provider: str = "freegoogle"  # "freegoogle" or "googlecloud"
-    _font_cache_service: "FontCacheService | None" = None
 
     # OCR API configurations - user must provide their own API key
     _google_vision_api_key: str = ""
@@ -1034,8 +1031,7 @@ class Plugin(FontCacheMixin):
                 "translated_text_font_style": self._settings.get_setting("translated_text_font_style", "normal"),
                 "hide_identical_translations": self._settings.get_setting("hide_identical_translations", False),
                 "allow_label_growth": self._settings.get_setting("allow_label_growth", False),
-                "custom_recognition_settings": self._settings.get_setting("custom_recognition_settings", False),
-                "auto_cache_fonts": self._settings.get_setting("auto_cache_fonts", False)
+                "custom_recognition_settings": self._settings.get_setting("custom_recognition_settings", False)
             }
             return settings
         except Exception as e:
@@ -1647,9 +1643,6 @@ class Plugin(FontCacheMixin):
             self._quick_toggle_enabled = load_setting("quick_toggle_enabled", self._quick_toggle_enabled)
 
             os.makedirs(self._screenshotPath, exist_ok=True)
-
-            # Initialise persistent font cache
-            self._init_font_cache()
 
             google_api_key = self._settings.get_setting("google_api_key", "")
             if google_api_key:

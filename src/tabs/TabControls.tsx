@@ -12,8 +12,7 @@ import {
 import { VFC } from "react";
 import { useSettings } from "../SettingsContext";
 import { InputMode } from "../Input";
-import { useFontOptions, useFontCacheControls, useTranslatedTextFontChange } from "../fonts";
-import { AutoCacheDescription } from "./AutoCacheDescription";
+import { useFontOptions, isRemoteFont, loadRemoteFont } from "../fonts";
 
 // Input mode options for dropdown
 const inputModeOptions = [
@@ -66,28 +65,11 @@ interface TabControlsProps {
 
 export const TabControls: VFC<TabControlsProps> = ({ inputDiagnostics }) => {
     const { settings, updateSetting } = useSettings();
-    const { fontOptions, fontDescription, preloadWebFonts, refreshCachedFonts, webFonts, dyslexiaFonts, cachedFonts } = useFontOptions(
+    const { fontOptions, fontDescription, preloadWebFonts } = useFontOptions(
         settings.translatedTextFontFamily,
         settings.targetLanguage,
         () => updateSetting('translatedTextFontFamily', '', 'Text font'),
     );
-
-    const cacheControls = useFontCacheControls({
-        autoCacheFonts: settings.autoCacheFonts,
-        translatedTextFontFamily: settings.translatedTextFontFamily,
-        targetLanguage: settings.targetLanguage,
-        webFonts,
-        dyslexiaFonts,
-        cachedFonts,
-        refreshCachedFonts,
-    });
-
-    const handleTranslatedTextFontChange = useTranslatedTextFontChange({
-        autoCacheFonts: settings.autoCacheFonts,
-        cachedFonts,
-        enqueueForAutoCache: cacheControls.actions.enqueueForAutoCache,
-        updateSetting: (key, value, label) => updateSetting(key, value, label),
-    });
 
     return (
         <div style={{ marginLeft: "-8px", marginRight: "-8px" }}>
@@ -209,23 +191,24 @@ export const TabControls: VFC<TabControlsProps> = ({ inputDiagnostics }) => {
                         description={fontDescription}
                         rgOptions={fontOptions}
                         selectedOption={settings.translatedTextFontFamily}
-                        renderButtonValue={() => settings.translatedTextFontFamily || 'Auto (System Default)'}
                         onMenuWillOpen={(showMenu) => {
                             preloadWebFonts();
-                            refreshCachedFonts();
                             showMenu();
                         }}
-                        onChange={handleTranslatedTextFontChange}
-                    />
-                </PanelSectionRow>
-
-                <PanelSectionRow>
-                    <ToggleField
-                        checked={settings.autoCacheFonts}
-                        label="Auto-Cache Fonts"
-                        description={<AutoCacheDescription cacheControls={cacheControls} />}
-                        bottomSeparator="standard"
-                        onChange={(value) => updateSetting('autoCacheFonts', value, 'Auto-cache fonts')}
+                        onChange={(option) => {
+                            const fontName = option.data;
+                            if (fontName && isRemoteFont(fontName)) {
+                                const previousFont = settings.translatedTextFontFamily;
+                                updateSetting('translatedTextFontFamily', fontName, 'Text font');
+                                loadRemoteFont(fontName).then((ok) => {
+                                    if (!ok) {
+                                        updateSetting('translatedTextFontFamily', previousFont, 'Text font');
+                                    }
+                                });
+                            } else {
+                                updateSetting('translatedTextFontFamily', fontName, 'Text font');
+                            }
+                        }}
                     />
                 </PanelSectionRow>
 

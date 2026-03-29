@@ -6,7 +6,7 @@ import { findModuleChild } from "@decky/ui";
 import { VFC, useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { TranslatedRegion } from "./TextTranslator";
 import { logger } from "./Logger";
-import { buildTranslatedFontFamily, resolveFontStyleCSS, useFontReady } from "./fonts";
+import { buildTranslatedFontFamily, ensureFontLoaded, resolveFontStyleCSS } from "./fonts";
 import type { FontStyleOption } from "./fonts";
 
 export type HorizontalTextAlignment = 'left' | 'right' | 'center' | 'justify';
@@ -372,8 +372,10 @@ export const TranslatedTextOverlay: VFC<{
     // State to track the natural (original) image dimensions from the screenshot
     const [naturalDimensions, setNaturalDimensions] = useState({ width: 1280, height: 800 });
 
-    // Track when the selected font is ready to force a repaint
-    const fontReady = useFontReady(translatedTextFontFamily);
+    // Load font as a side-effect (network request / DOM injection)
+    useEffect(() => {
+        ensureFontLoaded(translatedTextFontFamily);
+    }, [translatedTextFontFamily]);
 
     // Screenshot fade-in: double rAF guarantees a real browser reflow between
     // clearing opacity and restoring it, so the CSS transition always fires.
@@ -419,10 +421,10 @@ export const TranslatedTextOverlay: VFC<{
     const translatedOverlayFontFamily = useMemo(
         () => {
             const resolved = buildTranslatedFontFamily(translatedTextFontFamily);
-            logger.debug('Overlay', `Font resolved: "${translatedTextFontFamily}" → "${resolved}" (ready=${fontReady})`);
+            logger.debug('Overlay', `Font resolved: "${translatedTextFontFamily}" → "${resolved}"`);
             return resolved;
         },
-        [translatedTextFontFamily, fontReady]
+        [translatedTextFontFamily]
     );
 
     const formattedImageData = imageData && imageData.startsWith('data:')

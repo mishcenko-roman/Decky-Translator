@@ -4,7 +4,6 @@ import { call } from '@decky/api';
 import { GameTranslatorLogic } from './Translator';
 import { InputMode } from './Input';
 import { logger } from './Logger';
-import { initializeFontCache } from './fonts';
 
 // Define the settings interface
 export interface Settings {
@@ -34,7 +33,6 @@ export interface Settings {
     hideIdenticalTranslations: boolean;
     allowLabelGrowth: boolean;
     customRecognitionSettings: boolean;
-    autoCacheFonts: boolean;
 }
 
 // Define action types
@@ -70,8 +68,7 @@ const initialSettings: Settings = {
     translatedTextFontStyle: 'normal',
     hideIdenticalTranslations: false,
     allowLabelGrowth: false,
-    customRecognitionSettings: false,
-    autoCacheFonts: false
+    customRecognitionSettings: false
 };
 
 // Create the reducer
@@ -142,8 +139,7 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({
                     translatedTextFontStyle: serverSettings.translated_text_font_style ?? 'normal',
                     hideIdenticalTranslations: serverSettings.hide_identical_translations ?? false,
                     allowLabelGrowth: serverSettings.allow_label_growth ?? false,
-                    customRecognitionSettings: serverSettings.custom_recognition_settings ?? false,
-                    autoCacheFonts: serverSettings.auto_cache_fonts ?? false
+                    customRecognitionSettings: serverSettings.custom_recognition_settings ?? false
                 };
 
                 // Update settings in context
@@ -173,11 +169,6 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({
                 logic.setTranslatedTextFontStyle(serverSettings.translated_text_font_style ?? 'normal');
                 logic.setHideIdenticalTranslations(serverSettings.hide_identical_translations ?? false);
                 logic.setAllowLabelGrowth(serverSettings.allow_label_growth ?? false);
-
-                await initializeFontCache(
-                    serverSettings.auto_cache_fonts ?? false,
-                    serverSettings.translated_text_font_family ?? ''
-                );
 
                 logger.info('SettingsContext', 'All settings loaded successfully');
                 logger.logObject('SettingsContext', 'Settings', mappedSettings);
@@ -224,8 +215,7 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({
                 translatedTextFontStyle: 'translated_text_font_style',
                 hideIdenticalTranslations: 'hide_identical_translations',
                 allowLabelGrowth: 'allow_label_growth',
-                customRecognitionSettings: 'custom_recognition_settings',
-                autoCacheFonts: 'auto_cache_fonts'
+                customRecognitionSettings: 'custom_recognition_settings'
             };
 
             // Skip settings that don't need to be saved to backend

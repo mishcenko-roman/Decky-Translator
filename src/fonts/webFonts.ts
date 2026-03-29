@@ -1,6 +1,3 @@
-import { loadFontFromCache, cacheFontToDisk, isAutoCacheEnabled } from "./fontCache";
-import { logger } from "../Logger";
-
 // Curated list of Google Fonts with Cyrillic + Latin-ext support.
 export const WEB_FONTS: string[] = [
     'Open Sans',
@@ -43,10 +40,6 @@ const GFONTS_LINK_PREFIX = 'decky-translator-gfont-';
 export const GOOGLE_FONT_TIMEOUT_MS = 6000;
 const loadedWebFonts = new Set<string>();
 
-interface LoadWebFontOptions {
-    allowAutoCache?: boolean;
-}
-
 export function injectStylesheetLink(id: string, href: string, timeoutMs: number): Promise<boolean> {
     if (document.getElementById(id)) return Promise.resolve(true);
 
@@ -76,49 +69,26 @@ export function injectStylesheetLink(id: string, href: string, timeoutMs: number
     });
 }
 
-export function loadGoogleFont(fontName: string, options: LoadWebFontOptions = {}): Promise<boolean> {
-    const shouldAutoCache = options.allowAutoCache ?? true;
-    if (loadedWebFonts.has(fontName)) {
-        logger.debug('WebFonts', `Font "${fontName}" already loaded (in-memory set)`);
-        return Promise.resolve(true);
-    }
+export function loadGoogleFont(fontName: string): Promise<boolean> {
+    if (loadedWebFonts.has(fontName)) return Promise.resolve(true);
 
+    const id = GFONTS_LINK_PREFIX + fontName.replace(/\s+/g, '-');
     const familyParam = fontName.replace(/\s+/g, '+');
-    const cssUrl = `https://fonts.googleapis.com/css2?family=${familyParam}:wght@400;700&display=swap`;
+    const href = `https://fonts.googleapis.com/css2?family=${familyParam}:wght@400;700&display=swap`;
 
-    // Try persistent disk cache first.
-    return loadFontFromCache(fontName).then(cached => {
-        if (cached) {
-            logger.debug('WebFonts', `Font "${fontName}" loaded from disk cache`);
-            loadedWebFonts.add(fontName);
-            return true;
-        }
-        logger.debug('WebFonts', `Font "${fontName}" not in cache, trying network...`);
-        const id = GFONTS_LINK_PREFIX + fontName.replace(/\s+/g, '-');
-        return injectStylesheetLink(id, cssUrl, GOOGLE_FONT_TIMEOUT_MS).then(ok => {
-            if (ok) {
-                loadedWebFonts.add(fontName);
-                if (shouldAutoCache && isAutoCacheEnabled()) cacheFontToDisk(fontName, [cssUrl]).catch(() => {});
-            } else {
-                logger.debug('WebFonts', `Font "${fontName}" failed to load from network`);
-            }
-            return ok;
-        });
+    return injectStylesheetLink(id, href, GOOGLE_FONT_TIMEOUT_MS).then(ok => {
+        if (ok) loadedWebFonts.add(fontName);
+        return ok;
     });
 }
 
 export function preloadWebFontList(fonts: string[]): void {
     for (const f of fonts) {
-        loadGoogleFont(f, { allowAutoCache: false }).catch(() => {});
+        loadGoogleFont(f).catch(() => {});
     }
 }
 
 export function cleanupWebFonts(): void {
     document.querySelectorAll(`[id^="${GFONTS_LINK_PREFIX}"]`).forEach(el => el.remove());
-    loadedWebFonts.clear();
-}
-
-/** Reset in-memory loaded state without touching DOM nodes. */
-export function resetLoadedWebFontsMemory(): void {
     loadedWebFonts.clear();
 }
