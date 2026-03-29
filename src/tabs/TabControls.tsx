@@ -12,6 +12,8 @@ import {
 import { VFC } from "react";
 import { useSettings } from "../SettingsContext";
 import { InputMode } from "../Input";
+import { useFontOptions, useFontCacheControls, useTranslatedTextFontChange } from "../fonts";
+import { AutoCacheDescription } from "./AutoCacheDescription";
 
 // Input mode options for dropdown
 const inputModeOptions = [
@@ -26,6 +28,20 @@ const inputModeOptions = [
     { label: "L5 + R5", data: InputMode.L5_R5_COMBO },
     { label: "Both Touchpads Touch", data: InputMode.TOUCHPAD_COMBO }
 ];
+
+const translatedTextAlignmentOptions = [
+    { label: "Left", data: 'left' },
+    { label: "Right", data: 'right' },
+    { label: "Center", data: 'center' },
+    { label: "Stretch", data: 'justify' }
+];
+
+const fontStyleLabels: Record<string, string> = {
+    normal: 'Normal',
+    bold: 'Bold',
+    italic: 'Italic',
+    bolditalic: 'Bold Italic'
+};
 
 // Helper to get button labels for current input mode
 const getInputModeButtons = (mode: string): string => {
@@ -50,6 +66,28 @@ interface TabControlsProps {
 
 export const TabControls: VFC<TabControlsProps> = ({ inputDiagnostics }) => {
     const { settings, updateSetting } = useSettings();
+    const { fontOptions, fontDescription, preloadWebFonts, refreshCachedFonts, webFonts, dyslexiaFonts, cachedFonts } = useFontOptions(
+        settings.translatedTextFontFamily,
+        settings.targetLanguage,
+        () => updateSetting('translatedTextFontFamily', '', 'Text font'),
+    );
+
+    const cacheControls = useFontCacheControls({
+        autoCacheFonts: settings.autoCacheFonts,
+        translatedTextFontFamily: settings.translatedTextFontFamily,
+        targetLanguage: settings.targetLanguage,
+        webFonts,
+        dyslexiaFonts,
+        cachedFonts,
+        refreshCachedFonts,
+    });
+
+    const handleTranslatedTextFontChange = useTranslatedTextFontChange({
+        autoCacheFonts: settings.autoCacheFonts,
+        cachedFonts,
+        enqueueForAutoCache: cacheControls.actions.enqueueForAutoCache,
+        updateSetting: (key, value, label) => updateSetting(key, value, label),
+    });
 
     return (
         <div style={{ marginLeft: "-8px", marginRight: "-8px" }}>
@@ -152,6 +190,58 @@ export const TabControls: VFC<TabControlsProps> = ({ inputDiagnostics }) => {
                         onChange={(value) => {
                             updateSetting('groupingPower', value, 'Text grouping');
                         }}
+                    />
+                </PanelSectionRow>
+
+                <PanelSectionRow>
+                    <DropdownItem
+                        label="Translated Text Alignment"
+                        description="Choose alignment for translated text labels"
+                        rgOptions={translatedTextAlignmentOptions}
+                        selectedOption={settings.translatedTextAlignment}
+                        onChange={(option) => updateSetting('translatedTextAlignment', option.data, 'Text alignment')}
+                    />
+                </PanelSectionRow>
+
+                <PanelSectionRow>
+                    <DropdownItem
+                        label="Translated Text Font"
+                        description={fontDescription}
+                        rgOptions={fontOptions}
+                        selectedOption={settings.translatedTextFontFamily}
+                        renderButtonValue={() => settings.translatedTextFontFamily || 'Auto (System Default)'}
+                        onMenuWillOpen={(showMenu) => {
+                            preloadWebFonts();
+                            refreshCachedFonts();
+                            showMenu();
+                        }}
+                        onChange={handleTranslatedTextFontChange}
+                    />
+                </PanelSectionRow>
+
+                <PanelSectionRow>
+                    <ToggleField
+                        checked={settings.autoCacheFonts}
+                        label="Auto-Cache Fonts"
+                        description={<AutoCacheDescription cacheControls={cacheControls} />}
+                        bottomSeparator="standard"
+                        onChange={(value) => updateSetting('autoCacheFonts', value, 'Auto-cache fonts')}
+                    />
+                </PanelSectionRow>
+
+                <PanelSectionRow>
+                    <DropdownItem
+                        label="Translated Text Style"
+                        description="Font weight and style for translated text"
+                        rgOptions={[
+                            { label: <span>Normal</span>, data: "normal" },
+                            { label: <span style={{ fontWeight: 'bold' }}>Bold</span>, data: "bold" },
+                            { label: <span style={{ fontStyle: 'italic' }}>Italic</span>, data: "italic" },
+                            { label: <span style={{ fontWeight: 'bold', fontStyle: 'italic' }}>Bold Italic</span>, data: "bolditalic" }
+                        ]}
+                        selectedOption={settings.translatedTextFontStyle}
+                        renderButtonValue={() => fontStyleLabels[settings.translatedTextFontStyle] || 'Normal'}
+                        onChange={(option) => updateSetting('translatedTextFontStyle', option.data, 'Text style')}
                     />
                 </PanelSectionRow>
 

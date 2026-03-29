@@ -3,9 +3,13 @@
 import { findModuleChild } from "@decky/ui";
 
 
-import { VFC, useEffect, useState, useRef, useCallback } from "react";
+import { VFC, useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { TranslatedRegion } from "./TextTranslator";
 import { logger } from "./Logger";
+import { buildTranslatedFontFamily, resolveFontStyleCSS, useFontReady } from "./fonts";
+import type { FontStyleOption } from "./fonts";
+
+export type HorizontalTextAlignment = 'left' | 'right' | 'center' | 'justify';
 
 // UI Composition for overlay
 enum UIComposition {
@@ -44,13 +48,16 @@ export class ImageState {
     private translationsVisible = true; // New property to track translation visibility
     private fontScale = 1.0;
     private allowLabelGrowth = false;
-    private onStateChangedListeners: Array<(visible: boolean, imageData: string, regions: TranslatedRegion[], loading: boolean, processingStep: string, translationsVisible: boolean, fontScale: number, allowLabelGrowth: boolean) => void> = [];
+    private translatedTextAlignment: HorizontalTextAlignment = 'justify';
+    private translatedTextFontFamily = "";
+    private translatedTextFontStyle: FontStyleOption = 'normal';
+    private onStateChangedListeners: Array<(visible: boolean, imageData: string, regions: TranslatedRegion[], loading: boolean, processingStep: string, translationsVisible: boolean, fontScale: number, allowLabelGrowth: boolean, translatedTextAlignment: HorizontalTextAlignment, translatedTextFontFamily: string, translatedTextFontStyle: FontStyleOption) => void> = [];
 
-    onStateChanged(callback: (visible: boolean, imageData: string, regions: TranslatedRegion[], loading: boolean, processingStep: string, translationsVisible: boolean, fontScale: number, allowLabelGrowth: boolean) => void): void {
+    onStateChanged(callback: (visible: boolean, imageData: string, regions: TranslatedRegion[], loading: boolean, processingStep: string, translationsVisible: boolean, fontScale: number, allowLabelGrowth: boolean, translatedTextAlignment: HorizontalTextAlignment, translatedTextFontFamily: string, translatedTextFontStyle: FontStyleOption) => void): void {
         this.onStateChangedListeners.push(callback);
     }
 
-    offStateChanged(callback: (visible: boolean, imageData: string, regions: TranslatedRegion[], loading: boolean, processingStep: string, translationsVisible: boolean, fontScale: number, allowLabelGrowth: boolean) => void): void {
+    offStateChanged(callback: (visible: boolean, imageData: string, regions: TranslatedRegion[], loading: boolean, processingStep: string, translationsVisible: boolean, fontScale: number, allowLabelGrowth: boolean, translatedTextAlignment: HorizontalTextAlignment, translatedTextFontFamily: string, translatedTextFontStyle: FontStyleOption) => void): void {
         const index = this.onStateChangedListeners.indexOf(callback);
         if (index !== -1) {
             this.onStateChangedListeners.splice(index, 1);
@@ -104,6 +111,33 @@ export class ImageState {
 
     getAllowLabelGrowth(): boolean {
         return this.allowLabelGrowth;
+    }
+
+    setTranslatedTextAlignment(alignment: HorizontalTextAlignment): void {
+        this.translatedTextAlignment = alignment;
+        this.notifyListeners();
+    }
+
+    getTranslatedTextAlignment(): HorizontalTextAlignment {
+        return this.translatedTextAlignment;
+    }
+
+    setTranslatedTextFontFamily(fontFamily: string): void {
+        this.translatedTextFontFamily = fontFamily;
+        this.notifyListeners();
+    }
+
+    getTranslatedTextFontFamily(): string {
+        return this.translatedTextFontFamily;
+    }
+
+    setTranslatedTextFontStyle(style: FontStyleOption): void {
+        this.translatedTextFontStyle = style;
+        this.notifyListeners();
+    }
+
+    getTranslatedTextFontStyle(): FontStyleOption {
+        return this.translatedTextFontStyle;
     }
 
     // Update the current processing step
@@ -195,7 +229,7 @@ export class ImageState {
 
     private notifyListeners(): void {
         for (const callback of this.onStateChangedListeners) {
-            callback(this.visible, this.imageData, this.translatedRegions, this.loading, this.processingStep, this.translationsVisible, this.fontScale, this.allowLabelGrowth);
+            callback(this.visible, this.imageData, this.translatedRegions, this.loading, this.processingStep, this.translationsVisible, this.fontScale, this.allowLabelGrowth, this.translatedTextAlignment, this.translatedTextFontFamily, this.translatedTextFontStyle);
         }
     }
 
@@ -209,6 +243,74 @@ export class ImageState {
 
     getCurrentStep(): string {
         return this.processingStep;
+    }
+}
+
+// Redistribute text evenly across maxLines via binary search for minimum line width.
+// CJK (no spaces): splits by character count.
+function redistributeText(flat: string, maxLines: number): string {
+    if (maxLines <= 1 || flat.length === 0) return flat;
+
+    const hasSpaces = flat.includes(' ');
+
+    if (hasSpaces) {
+        const words = flat.split(/\s+/);
+        if (words.length <= maxLines) return words.join('\n');
+
+        // Binary search: find minimum max-line-width that fits in maxLines
+        const longestWord = Math.max(...words.map(w => w.length));
+        let lo = longestWord;
+        let hi = flat.length;
+
+        const canFit = (maxWidth: number): boolean => {
+            let lines = 1;
+            let lineLen = 0;
+            for (const word of words) {
+                if (lineLen === 0) {
+                    lineLen = word.length;
+                } else if (lineLen + 1 + word.length <= maxWidth) {
+                    lineLen += 1 + word.length;
+                } else {
+                    lines++;
+                    lineLen = word.length;
+                    if (lines > maxLines) return false;
+                }
+            }
+            return lines <= maxLines;
+        };
+
+        while (lo < hi) {
+            const mid = Math.floor((lo + hi) / 2);
+            if (canFit(mid)) {
+                hi = mid;
+            } else {
+                lo = mid + 1;
+            }
+        }
+
+        const optimalWidth = lo;
+        const lines: string[] = [];
+        let currentLine = '';
+        for (const word of words) {
+            if (currentLine.length === 0) {
+                currentLine = word;
+            } else if (currentLine.length + 1 + word.length <= optimalWidth) {
+                currentLine += ' ' + word;
+            } else {
+                lines.push(currentLine);
+                currentLine = word;
+            }
+        }
+        if (currentLine) lines.push(currentLine);
+
+        return lines.join('\n');
+    } else {
+        const charsPerLine = Math.ceil(flat.length / maxLines);
+        const lines: string[] = [];
+        for (let i = 0; i < flat.length; i += charsPerLine) {
+            lines.push(flat.slice(i, i + charsPerLine));
+        }
+        return lines.join('\n');
     }
 }
 
@@ -253,8 +355,11 @@ export const TranslatedTextOverlay: VFC<{
     processingStep: string,
     translationsVisible: boolean,
     fontScale: number,
-    allowLabelGrowth: boolean
-}> = ({ visible, imageData, regions, loading, processingStep, translationsVisible, fontScale, allowLabelGrowth }) => {
+    allowLabelGrowth: boolean,
+    translatedTextAlignment: HorizontalTextAlignment,
+    translatedTextFontFamily: string,
+    translatedTextFontStyle: FontStyleOption
+}> = ({ visible, imageData, regions, loading, processingStep, translationsVisible, fontScale, allowLabelGrowth, translatedTextAlignment, translatedTextFontFamily, translatedTextFontStyle }) => {
     // Use the UI composition system - always active to prevent Steam UI flash
     useUIComposition(UIComposition.Notification);
 
@@ -267,6 +372,58 @@ export const TranslatedTextOverlay: VFC<{
     // State to track the natural (original) image dimensions from the screenshot
     const [naturalDimensions, setNaturalDimensions] = useState({ width: 1280, height: 800 });
 
+    // Track when the selected font is ready to force a repaint
+    const fontReady = useFontReady(translatedTextFontFamily);
+
+    // Screenshot fade-in: double rAF guarantees a real browser reflow between
+    // clearing opacity and restoring it, so the CSS transition always fires.
+    const prevImageDataRef = useRef<string>("");
+    const [screenshotVisible, setScreenshotVisible] = useState<boolean>(true);
+
+    useEffect(() => {
+        if (!imageData) {
+            prevImageDataRef.current = "";
+            setScreenshotVisible(false);
+            return;
+        }
+        if (imageData === prevImageDataRef.current) return;
+
+        prevImageDataRef.current = imageData;
+        setScreenshotVisible(false);
+        // Two nested rAFs ensure the browser has committed the opacity:0 paint
+        // before we flip back to 1, so the CSS transition reliably fires.
+        let raf1: number | null = null;
+        let raf2: number | null = null;
+        raf1 = requestAnimationFrame(() => {
+            raf2 = requestAnimationFrame(() => setScreenshotVisible(true));
+        });
+        return () => {
+            if (raf1 !== null) cancelAnimationFrame(raf1);
+            if (raf2 !== null) cancelAnimationFrame(raf2);
+        };
+    }, [imageData]);
+
+    // Region epoch: bumping the key on each new translation batch forces React
+    // to unmount/remount text boxes, retriggering the fade-in animation.
+    // We skip empty arrays to avoid resetting the epoch when the overlay clears.
+    const [regionEpoch, setRegionEpoch] = useState<number>(0);
+    const prevRegionsRef = useRef<TranslatedRegion[]>([]);
+    useEffect(() => {
+        if (regions.length > 0 && regions !== prevRegionsRef.current) {
+            prevRegionsRef.current = regions;
+            setRegionEpoch(e => e + 1);
+        }
+    }, [regions]);
+
+    // Pure computation — no side-effects
+    const translatedOverlayFontFamily = useMemo(
+        () => {
+            const resolved = buildTranslatedFontFamily(translatedTextFontFamily);
+            logger.debug('Overlay', `Font resolved: "${translatedTextFontFamily}" → "${resolved}" (ready=${fontReady})`);
+            return resolved;
+        },
+        [translatedTextFontFamily, fontReady]
+    );
 
     const formattedImageData = imageData && imageData.startsWith('data:')
         ? imageData
@@ -363,6 +520,13 @@ export const TranslatedTextOverlay: VFC<{
                  opacity: visible ? 1 : 0,
                  pointerEvents: visible ? "auto" : "none",
              }}>
+            {/* Always-present keyframes — must be outside loading block so animation works after loading ends */}
+            <style>{`
+                @keyframes fadeInTranslation {
+                    0%   { opacity: 0; }
+                    100% { opacity: 1; }
+                }
+            `}</style>
 
             {/* Screenshot with Translations */}
             {imageData && (
@@ -382,7 +546,9 @@ export const TranslatedTextOverlay: VFC<{
                             objectFit: "contain",
                             backgroundColor: "rgba(0, 0, 0, 0.15)",
                             border: translationsVisible ? "1px solid #f44336" : "1px solid #ffc107",
-                            imageRendering: "pixelated"
+                            imageRendering: "pixelated",
+                            opacity: screenshotVisible ? 1 : 0,
+                            transition: "opacity 0.3s ease-in-out",
                         }}
                         alt="Screenshot"
                     />
@@ -402,44 +568,124 @@ export const TranslatedTextOverlay: VFC<{
                             height: Math.round((region.rect.bottom - region.rect.top) * heightFactor + pad * 2),
                         }));
 
-                        // For each label, find how far right it can grow before hitting a neighbor
-                        const maxWidths = scaled.map((rect, i) => {
+                        // For each label, find how far it can grow in both directions
+                        const expansionLimits = scaled.map((rect, i) => {
                             let maxRight = imgWidth;
+                            let minLeft = 0;
                             const rectBottom = rect.top + rect.height;
 
                             for (let j = 0; j < scaled.length; j++) {
                                 if (i === j) continue;
                                 const other = scaled[j];
 
-                                // Only care about vertically overlapping neighbors to the right
-                                if (other.left > rect.left &&
-                                    rect.top < other.top + other.height &&
-                                    rectBottom > other.top) {
-                                    maxRight = Math.min(maxRight, other.left - gap);
+                                // Check vertical overlap
+                                if (rect.top < other.top + other.height && rectBottom > other.top) {
+                                    // Neighbor to the right
+                                    if (other.left > rect.left) {
+                                        maxRight = Math.min(maxRight, other.left - gap);
+                                    }
+                                    // Neighbor to the left
+                                    if (other.left < rect.left) {
+                                        minLeft = Math.max(minLeft, other.left + other.width + gap);
+                                    }
                                 }
                             }
 
-                            return Math.max(rect.width, maxRight - rect.left);
+                            const maxExpandRight = Math.max(0, maxRight - (rect.left + rect.width));
+                            const maxExpandLeft = Math.max(0, rect.left - minLeft);
+
+                            return { maxExpandRight, maxExpandLeft };
                         });
 
                         return regions.map((region, index) => {
+                            const stableRegionKey = `${region.rect.left}-${region.rect.top}-${region.rect.right}-${region.rect.bottom}-${region.text}-${region.translatedText}`;
                             const fontSize = calculateFontSize(region, generalFactor, fontScale);
-                            const displayText = region.translatedText || region.text;
+                            let displayText = region.translatedText || region.text;
+
+                            // Redistribute text to fill original block height, minimising width
+                            if (allowLabelGrowth) {
+                                const lineHeight = fontSize * 1.15;
+                                const availableHeight = scaled[index].height - 4;
+                                const maxLines = Math.max(1, Math.floor(availableHeight / lineHeight));
+
+                                const flatText = displayText.replace(/\n/g, ' ').trim();
+                                if (maxLines > 1 && flatText.length > 0) {
+                                    displayText = redistributeText(flatText, maxLines);
+                                    logger.debug('Overlay',
+                                        `[Redistribute] blockH=${scaled[index].height}px fontSize=${Math.round(fontSize)}px ` +
+                                        `maxLines=${maxLines} → ${displayText.split('\n').length} lines: "${displayText}"`
+                                    );
+                                }
+                            }
+
+                            const alignmentStyles =
+                                translatedTextAlignment === 'right'
+                                    ? { textAlign: 'right' as const, justifyContent: 'flex-end' as const }
+                                    : translatedTextAlignment === 'center'
+                                        ? { textAlign: 'center' as const, justifyContent: 'center' as const }
+                                        : translatedTextAlignment === 'justify'
+                                            ? { textAlign: 'justify' as const, justifyContent: 'flex-start' as const }
+                                            : { textAlign: 'left' as const, justifyContent: 'flex-start' as const };
+
+                            // Compute label position and size based on alignment and expansion
+                            let labelMaxWidth = scaled[index].width;
+                            // Use max-content width for right/center/justify so single-line
+                            // blocks don't over-stretch while multi-line blocks still expand
+                            let useMaxContentWidth = false;
+                            // Position styles differ per alignment direction
+                            let positionStyles: Record<string, string> = {
+                                left: `${scaled[index].left}px`,
+                            };
+
+                            if (allowLabelGrowth) {
+                                const { maxExpandRight, maxExpandLeft } = expansionLimits[index];
+
+                                if (translatedTextAlignment === 'left') {
+                                    // Expand to the right — anchor left edge, auto-size width
+                                    labelMaxWidth = scaled[index].width + maxExpandRight;
+                                    positionStyles = { left: `${scaled[index].left}px` };
+                                } else if (translatedTextAlignment === 'right') {
+                                    // Expand to the left — anchor right edge
+                                    labelMaxWidth = scaled[index].width + maxExpandLeft;
+                                    useMaxContentWidth = true;
+                                    positionStyles = { right: `${imgWidth - (scaled[index].left + scaled[index].width)}px` };
+                                } else {
+                                    // Center or Justify — expand equally from center
+                                    const expandEach = Math.min(maxExpandLeft, maxExpandRight);
+                                    labelMaxWidth = scaled[index].width + expandEach * 2;
+                                    useMaxContentWidth = true;
+                                    const centerX = scaled[index].left + scaled[index].width / 2;
+                                    positionStyles = { left: `${centerX}px`, transform: 'translateX(-50%)' };
+                                }
+                            }
 
                             return (
                                 <div
-                                    key={index}
+                                    key={`${regionEpoch}-${stableRegionKey}`}
                                     style={{
                                         position: "absolute",
                                         display: 'flex',
-                                        textAlign: 'justify',
-                                        justifyContent: 'center',
+                                        justifyContent: alignmentStyles.justifyContent,
                                         alignItems: 'center',
-                                        left: `${scaled[index].left}px`,
+                                        ...positionStyles,
                                         top: `${scaled[index].top}px`,
                                         minWidth: `${scaled[index].width}px`,
-                                        maxWidth: `${allowLabelGrowth ? maxWidths[index] : scaled[index].width}px`,
+                                        ...(useMaxContentWidth
+                                            ? { width: 'max-content', maxWidth: `${labelMaxWidth}px` }
+                                            : { maxWidth: `${labelMaxWidth}px` }),
                                         minHeight: `${scaled[index].height}px`,
+                                        boxSizing: 'border-box',
+                                    }}
+                                >
+                                    {/* Visual layer: separated from the positioning wrapper above
+                                      * so that border-radius and animation apply only to the
+                                      * visible bubble, not to the invisible hit-area container. */}
+                                    <div style={{
+                                        width: '100%',
+                                        minHeight: `${scaled[index].height}px`,
+                                        display: 'flex',
+                                        justifyContent: alignmentStyles.justifyContent,
+                                        alignItems: 'center',
                                         boxSizing: 'border-box',
 
                                         backgroundColor: "rgba(0, 0, 0, 0.8)",
@@ -450,16 +696,22 @@ export const TranslatedTextOverlay: VFC<{
 
                                         fontSize: `${Math.round(fontSize)}px`,
                                         lineHeight: '1.15',
-                                        fontWeight: "400",
-                                        fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+                                        ...resolveFontStyleCSS(translatedTextFontStyle),
+                                        fontFamily: translatedOverlayFontFamily,
 
                                         wordWrap: "break-word",
                                         whiteSpace: "pre-wrap",
 
                                         animation: "fadeInTranslation 0.2s ease-out forwards"
-                                    }}
-                                >
-                                    {displayText}
+                                    }}>
+                                        <div style={{
+                                            width: '100%',
+                                            textAlign: alignmentStyles.textAlign,
+                                            textAlignLast: translatedTextAlignment === 'justify' ? 'justify' : alignmentStyles.textAlign,
+                                        }}>
+                                            {displayText}
+                                        </div>
+                                    </div>
                                 </div>
                             );
                         });
@@ -531,10 +783,6 @@ export const TranslatedTextOverlay: VFC<{
                             0% { transform: rotate(0deg); }
                             100% { transform: rotate(360deg); }
                         }
-                        @keyframes fadeInTranslation {
-                            0% { opacity: 0; transform: translateY(10px); }
-                            100% { opacity: 1; transform: translateY(0); }
-                        }
                     `}</style>
                     <div style={{ fontSize: "14px", whiteSpace: "nowrap" }}>
                         {processingStep}...
@@ -557,6 +805,9 @@ export const ImageOverlay: VFC<{ state: ImageState }> = ({ state }) => {
     const [translationsVisible, setTranslationsVisible] = useState<boolean>(true);
     const [fontScale, setFontScale] = useState<number>(1.0);
     const [allowLabelGrowth, setAllowLabelGrowth] = useState<boolean>(false);
+    const [translatedTextAlignment, setTranslatedTextAlignment] = useState<HorizontalTextAlignment>('justify');
+    const [translatedTextFontFamily, setTranslatedTextFontFamily] = useState<string>("");
+    const [translatedTextFontStyle, setTranslatedTextFontStyle] = useState<FontStyleOption>('normal');
 
     useEffect(() => {
         logger.debug('ImageOverlay', 'useEffect mounting, registering state listener');
@@ -569,7 +820,10 @@ export const ImageOverlay: VFC<{ state: ImageState }> = ({ state }) => {
             currProcessingStep: string,
             areTranslationsVisible: boolean,
             currentFontScale: number,
-            currentAllowLabelGrowth: boolean
+            currentAllowLabelGrowth: boolean,
+            currentTranslatedTextAlignment: HorizontalTextAlignment,
+            currentTranslatedTextFontFamily: string,
+            currentTranslatedTextFontStyle: FontStyleOption
         ) => {
             logger.debug('ImageOverlay', `State changed - visible=${isVisible}, imgData.length=${imgData?.length || 0}, regions=${textRegions?.length || 0}`);
             setVisible(isVisible);
@@ -580,6 +834,9 @@ export const ImageOverlay: VFC<{ state: ImageState }> = ({ state }) => {
             setTranslationsVisible(areTranslationsVisible);
             setFontScale(currentFontScale);
             setAllowLabelGrowth(currentAllowLabelGrowth);
+            setTranslatedTextAlignment(currentTranslatedTextAlignment);
+            setTranslatedTextFontFamily(currentTranslatedTextFontFamily);
+            setTranslatedTextFontStyle(currentTranslatedTextFontStyle);
         };
 
         state.onStateChanged(handleStateChanged);
@@ -607,6 +864,9 @@ export const ImageOverlay: VFC<{ state: ImageState }> = ({ state }) => {
             translationsVisible={translationsVisible}
             fontScale={fontScale}
             allowLabelGrowth={allowLabelGrowth}
+            translatedTextAlignment={translatedTextAlignment}
+            translatedTextFontFamily={translatedTextFontFamily}
+            translatedTextFontStyle={translatedTextFontStyle}
         />
     );
 };
