@@ -37,6 +37,14 @@ const useUIComposition: (composition: UIComposition) => void = findModuleChild(
     }
 );
 
+// Mountable component that holds a composition state request.
+// When unmounted, the hook cleanup calls RemoveMinimumCompositionStateRequest,
+// fully releasing the request so Steam's own UI sections can get input focus.
+const CompositionRequest: VFC<{ level: UIComposition }> = ({ level }) => {
+    useUIComposition(level);
+    return null;
+};
+
 // Enhanced ImageState to handle translated text regions
 export class ImageState {
     private visible = false;
@@ -360,8 +368,7 @@ export const TranslatedTextOverlay: VFC<{
     translatedTextFontFamily: string,
     translatedTextFontStyle: FontStyleOption
 }> = ({ visible, imageData, regions, loading, processingStep, translationsVisible, fontScale, allowLabelGrowth, translatedTextAlignment, translatedTextFontFamily, translatedTextFontStyle }) => {
-    // Use the UI composition system - always active to prevent Steam UI flash
-    useUIComposition(UIComposition.Notification);
+    // Composition layer is handled by CompositionRequest below -- only mounted when visible
 
     // Ref to the screenshot image element
     const imgRef = useRef<HTMLImageElement>(null);
@@ -505,6 +512,8 @@ export const TranslatedTextOverlay: VFC<{
     }
 
     return (
+        <>
+        {visible && <CompositionRequest level={UIComposition.Notification} />}
         <div id='translation-overlay'
              style={{
                  height: "100vh",
@@ -517,8 +526,6 @@ export const TranslatedTextOverlay: VFC<{
                  top: 0,
                  left: 0,
                  backgroundColor: "transparent",
-                 // Use opacity and pointer-events to hide instead of unmounting
-                 // This keeps useUIComposition hook active and prevents Steam UI flash
                  opacity: visible ? 1 : 0,
                  pointerEvents: visible ? "auto" : "none",
              }}>
@@ -792,6 +799,7 @@ export const TranslatedTextOverlay: VFC<{
                 </div>
             )}
         </div>
+        </>
     );
 };
 
@@ -854,8 +862,6 @@ export const ImageOverlay: VFC<{ state: ImageState }> = ({ state }) => {
         };
     }, [state]);
 
-    // Always render TranslatedTextOverlay to keep useUIComposition hook active
-    // This prevents Steam UI flash during translation transitions
     return (
         <TranslatedTextOverlay
             visible={visible}

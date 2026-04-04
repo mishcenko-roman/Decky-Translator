@@ -36,13 +36,15 @@ interface ActivationIndicatorProps {
     forDismiss?: boolean; // true when dismissing overlay
 }
 
-export const ActivationIndicator: VFC<ActivationIndicatorProps> = ({ visible, progress, text, forDismiss }) => {
-    // Use Notification layer for translate, Overlay for dismiss
-    const layer = forDismiss ? UIComposition.Overlay : UIComposition.Notification;
-    useUIComposition(layer);
+// Mountable component that holds a composition state request.
+// When unmounted, the hook cleanup removes the request entirely.
+const CompositionRequest: VFC<{ level: UIComposition }> = ({ level }) => {
+    useUIComposition(level);
+    return null;
+};
 
-    // Don't return null - use opacity to hide instead of unmounting
-    // This keeps the useUIComposition hook active and prevents Steam UI from flashing
+export const ActivationIndicator: VFC<ActivationIndicatorProps> = ({ visible, progress, text, forDismiss }) => {
+    const layer = forDismiss ? UIComposition.Overlay : UIComposition.Notification;
 
     const size = 36;
     const strokeWidth = 3;
@@ -52,6 +54,8 @@ export const ActivationIndicator: VFC<ActivationIndicatorProps> = ({ visible, pr
     const strokeColor = forDismiss ? "#f44336" : "#3498db";
 
     return (
+        <>
+        {visible && <CompositionRequest level={layer} />}
         <div style={{
             position: "fixed",
             bottom: "20px",
@@ -64,8 +68,6 @@ export const ActivationIndicator: VFC<ActivationIndicatorProps> = ({ visible, pr
             padding: '8px 12px',
             borderRadius: '20px',
             boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
-            // Use opacity and pointer-events to hide instead of unmounting
-            // This keeps useUIComposition hook active and prevents Steam UI flash
             opacity: visible ? 1 : 0,
             pointerEvents: visible ? "auto" : "none",
         }}>
@@ -102,5 +104,6 @@ export const ActivationIndicator: VFC<ActivationIndicatorProps> = ({ visible, pr
                 </div>
             )}
         </div>
+        </>
     );
 };
