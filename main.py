@@ -145,6 +145,8 @@ class HidrawButtonMonitor:
     # Device identification
     VALVE_VID = 0x28DE
     STEAMDECK_PID = 0x1205
+    # InputPlumber virtual controller (used on non-Steam Deck handhelds like Legion Go)
+    INPUTPLUMBER_PID = 0x12FB
     PACKET_SIZE = 64
     POLL_INTERVAL = 0.004  # 250Hz - matches controller report rate
 
@@ -196,6 +198,7 @@ class HidrawButtonMonitor:
     def __init__(self):
         self.device_fd = None
         self.device_path = None
+        self.device_pid = None  # Track which product we connected to
         self.running = False
         self.thread = None
         self.event_queue = queue.Queue(maxsize=100)
@@ -208,17 +211,17 @@ class HidrawButtonMonitor:
         logger.debug("HidrawButtonMonitor initialized")
 
     def find_device(self):
-        """Find the Steam Deck controller hidraw device.
+        """Find a Valve-compatible controller hidraw device.
 
-        The Steam Deck controller exposes 3 hidraw interfaces:
-        - Interface 0 (hidraw0): Not the gamepad interface
-        - Interface 1 (hidraw1): Not the gamepad interface
-        - Interface 2 (hidraw2): The gamepad interface with button data
+        Supports:
+        - Steam Deck controller (VID:28DE, PID:1205) with 3 hidraw interfaces
+        - InputPlumber virtual controller (VID:28DE, PID:12FB) on non-Steam Deck handhelds
 
-        We need to find the one that actually provides gamepad data by checking
-        which interface is 1.2 in the device path.
+        For Steam Deck, we need interface :1.2 for gamepad data.
+        For InputPlumber, there's typically a single virtual hidraw device.
         """
-        candidates = []
+        steamdeck_candidates = []
+        other_valve_candidates = []
 
         for i in range(10):
             path = f'/dev/hidraw{i}'
@@ -227,53 +230,82 @@ class HidrawButtonMonitor:
                 try:
                     with open(uevent_path, 'r') as f:
                         content = f.read().upper()
-                        # Check for Valve Steam Deck controller
-                        if '28DE' in content and '1205' in content:
-                            candidates.append((i, path))
-                            logger.debug(f"Found Valve controller candidate at {path}")
+                        if '28DE' not in content:
+                            continue
+                        if '1205' in content:
+                            steamdeck_candidates.append((i, path))
+                            logger.debug(f"Found Steam Deck controller candidate at {path}")
+                        elif '12FB' in content:
+                            other_valve_candidates.append((i, path))
+                            logger.debug(f"Found InputPlumber virtual controller candidate at {path}")
+                        else:
+                            other_valve_candidates.append((i, path))
+                            logger.debug(f"Found Valve device candidate at {path}")
                 except Exception as e:
                     logger.debug(f"Cannot read uevent for hidraw{i}: {e}")
 
-        if not candidates:
-            logger.warning("Steam Deck controller hidraw device not found")
-            return None
-
-        # Try to find the correct interface by checking the symlink path
-        # The gamepad interface is typically :1.2
-        for i, path in candidates:
-            try:
-                link_target = os.readlink(f'/sys/class/hidraw/hidraw{i}')
-                if ':1.2/' in link_target:
-                    logger.info(f"Found Steam Deck gamepad interface at {path} (interface 1.2)")
-                    return path
-            except Exception as e:
-                logger.debug(f"Cannot read symlink for hidraw{i}: {e}")
-
-        # Fallback: try each candidate with a blocking read to see which has data
-        for i, path in candidates:
-            try:
-                fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+        # Prefer real Steam Deck controller (interface :1.2)
+        if steamdeck_candidates:
+            for i, path in steamdeck_candidates:
                 try:
-                    # Use select to check if data is available within 100ms
-                    readable, _, _ = select.select([fd], [], [], 0.1)
-                    if readable:
-                        os.read(fd, 64)
-                        os.close(fd)
-                        logger.info(f"Found Steam Deck controller at {path} (has data)")
+                    link_target = os.readlink(f'/sys/class/hidraw/hidraw{i}')
+                    if ':1.2/' in link_target:
+                        logger.info(f"Found Steam Deck gamepad interface at {path} (interface 1.2)")
+                        self.device_pid = self.STEAMDECK_PID
                         return path
-                    os.close(fd)
-                except Exception:
-                    os.close(fd)
-            except Exception as e:
-                logger.debug(f"Cannot open {path}: {e}")
+                except Exception as e:
+                    logger.debug(f"Cannot read symlink for hidraw{i}: {e}")
 
-        # Last resort: return the highest numbered candidate (usually the gamepad)
-        if candidates:
-            path = candidates[-1][1]
+            # Fallback: try data availability
+            for i, path in steamdeck_candidates:
+                try:
+                    fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+                    try:
+                        readable, _, _ = select.select([fd], [], [], 0.1)
+                        if readable:
+                            os.read(fd, 64)
+                            os.close(fd)
+                            logger.info(f"Found Steam Deck controller at {path} (has data)")
+                            self.device_pid = self.STEAMDECK_PID
+                            return path
+                        os.close(fd)
+                    except Exception:
+                        os.close(fd)
+                except Exception as e:
+                    logger.debug(f"Cannot open {path}: {e}")
+
+            # Last resort for Steam Deck
+            path = steamdeck_candidates[-1][1]
             logger.info(f"Using Steam Deck controller at {path} (last candidate)")
+            self.device_pid = self.STEAMDECK_PID
             return path
 
-        logger.warning("Steam Deck controller hidraw device not found")
+        # Try InputPlumber / other Valve virtual devices
+        if other_valve_candidates:
+            for i, path in other_valve_candidates:
+                try:
+                    fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+                    try:
+                        readable, _, _ = select.select([fd], [], [], 0.1)
+                        if readable:
+                            os.read(fd, 64)
+                            os.close(fd)
+                            logger.info(f"Found Valve-compatible controller at {path} (has data)")
+                            self.device_pid = self.INPUTPLUMBER_PID
+                            return path
+                        os.close(fd)
+                    except Exception:
+                        os.close(fd)
+                except Exception as e:
+                    logger.debug(f"Cannot open {path}: {e}")
+
+            # Last resort
+            path = other_valve_candidates[-1][1]
+            logger.info(f"Using Valve-compatible controller at {path} (last candidate)")
+            self.device_pid = self.INPUTPLUMBER_PID
+            return path
+
+        logger.warning("No Valve-compatible controller hidraw device found")
         return None
 
     def send_feature_report(self, data):
@@ -290,7 +322,7 @@ class HidrawButtonMonitor:
             return False
 
     def initialize_device(self):
-        """Open device and send initialization commands to enable full controller mode."""
+        """Open device and send initialization commands if needed."""
         if self.device_path is None:
             self.device_path = self.find_device()
             if self.device_path is None:
@@ -299,26 +331,30 @@ class HidrawButtonMonitor:
         try:
             # Open device with read/write access
             self.device_fd = os.open(self.device_path, os.O_RDWR)
-            logger.info(f"Opened {self.device_path} for hidraw monitoring")
+            logger.info(f"Opened {self.device_path} for hidraw monitoring (pid={hex(self.device_pid or 0)})")
 
-            # Send initialization commands to enable full controller mode
-            # Command 1: Clear digital mappings (disable lizard mode)
-            if not self.send_feature_report([self.ID_CLEAR_DIGITAL_MAPPINGS]):
-                logger.warning("Failed to send CLEAR_DIGITAL_MAPPINGS")
+            # Only send init commands for real Steam Deck hardware
+            if self.device_pid == self.STEAMDECK_PID:
+                # Command 1: Clear digital mappings (disable lizard mode)
+                if not self.send_feature_report([self.ID_CLEAR_DIGITAL_MAPPINGS]):
+                    logger.warning("Failed to send CLEAR_DIGITAL_MAPPINGS")
 
-            # Command 2: Set settings to disable trackpad emulation
-            settings_cmd = [
-                self.ID_SET_SETTINGS_VALUES,
-                3,  # Number of settings
-                self.SETTING_LEFT_TRACKPAD_MODE, self.TRACKPAD_NONE,
-                self.SETTING_RIGHT_TRACKPAD_MODE, self.TRACKPAD_NONE,
-                self.SETTING_STEAM_WATCHDOG_ENABLE, 0,
-            ]
-            if not self.send_feature_report(settings_cmd):
-                logger.warning("Failed to send SET_SETTINGS_VALUES")
+                # Command 2: Set settings to disable trackpad emulation
+                settings_cmd = [
+                    self.ID_SET_SETTINGS_VALUES,
+                    3,  # Number of settings
+                    self.SETTING_LEFT_TRACKPAD_MODE, self.TRACKPAD_NONE,
+                    self.SETTING_RIGHT_TRACKPAD_MODE, self.TRACKPAD_NONE,
+                    self.SETTING_STEAM_WATCHDOG_ENABLE, 0,
+                ]
+                if not self.send_feature_report(settings_cmd):
+                    logger.warning("Failed to send SET_SETTINGS_VALUES")
+
+                logger.info("Steam Deck controller initialized for full button access")
+            else:
+                logger.info(f"Virtual/non-Steam Deck controller opened (skipping init commands)")
 
             self.initialized = True
-            logger.info("Steam Deck controller initialized for full button access")
             return True
 
         except Exception as e:
@@ -416,6 +452,7 @@ class HidrawButtonMonitor:
             self.device_fd = None
         self.initialized = False
         self.device_path = None
+        self.device_pid = None
 
     def _process_packet(self, data):
         """Parse HID packet and generate button events."""
