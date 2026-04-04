@@ -28,6 +28,7 @@ class ProviderType(Enum):
     OCR_SPACE = "ocrspace"      # OCR.space (free, no key needed)
     FREE_GOOGLE = "freegoogle"  # Free Google Translate via deep-translator
     RAPIDOCR = "rapidocr"       # Local RapidOCR via ONNX Runtime (no internet required)
+    CT2 = "ct2"                 # CTranslate2 translation
 
 
 @dataclass

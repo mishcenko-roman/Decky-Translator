@@ -22,7 +22,7 @@ export interface Settings {
     quickToggleEnabled: boolean; // Quick toggle overlay with right button in combo modes
     useFreeProviders: boolean; // Use free providers (OCR.space + free Google Translate) - deprecated, use ocrProvider
     ocrProvider: 'rapidocr' | 'ocrspace' | 'googlecloud'; // OCR provider: rapidocr (RapidOCR), ocrspace (OCR.space), googlecloud (Google Cloud)
-    translationProvider: 'freegoogle' | 'googlecloud'; // Translation provider: freegoogle (Free Google Translate), googlecloud (Google Cloud Translation)
+    translationProvider: 'freegoogle' | 'googlecloud' | 'ct2'; // Translation provider: freegoogle (Free Google Translate), googlecloud (Google Cloud Translation), ct2 (CTranslate2 + NLLB)
     googleApiKey: string; // Google Cloud Vision API key for text recognition
     debugMode: boolean; // Debug mode for verbose console logging
     fontScale: number; // Overlay font scale multiplier for external monitors

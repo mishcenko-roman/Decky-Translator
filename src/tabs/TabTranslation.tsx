@@ -10,12 +10,14 @@ import {
     showModal,
     ModalRoot,
     DialogButton,
+    ButtonItem,
     TextField,
     Field,
     Focusable
 } from "@decky/ui";
 
-import { VFC, useState, useEffect } from "react";
+import { call } from "@decky/api";
+import { VFC, useState, useEffect, useRef, useCallback } from "react";
 import { useSettings } from "../SettingsContext";
 import { HiKey } from "react-icons/hi2";
 
@@ -30,30 +32,30 @@ import rapidocrLogo from "../../assets/rapidocr-logo.png";
 
 // Language options with flag emojis
 const languageOptions = [
-    { label: "🌐 Auto-detect", data: "auto" },
-    { label: "🇬🇧 English", data: "en" },
-    { label: "🇪🇸 Spanish", data: "es" },
-    { label: "🇫🇷 French", data: "fr" },
-    { label: "🇩🇪 German", data: "de" },
-    { label: "🇬🇷 Greek", data: "el" },
-    { label: "🇮🇹 Italian", data: "it" },
-    { label: "🇵🇹 Portuguese", data: "pt" },
-    { label: "🇷🇺 Russian", data: "ru" },
-    { label: "🇯🇵 Japanese", data: "ja" },
-    { label: "🇰🇷 Korean", data: "ko" },
-    { label: "🇨🇳 Chinese (Simplified)", data: "zh-CN" },
-    { label: "🇹🇼 Chinese (Traditional)", data: "zh-TW" },
-    { label: "🇸🇦 Arabic", data: "ar" },
-    { label: "🇫🇮 Finnish", data: "fi" },
-    { label: "🇳🇱 Dutch", data: "nl" },
-    { label: "🇮🇳 Hindi", data: "hi" },
-    { label: "🇵🇱 Polish", data: "pl" },
-    { label: "🇹🇭 Thai", data: "th" },
-    { label: "🇹🇷 Turkish", data: "tr" },
-    { label: "🇺🇦 Ukrainian", data: "uk" },
-    { label: "🇷🇴 Romanian", data: "ro" },
-    { label: "🇻🇳 Vietnamese", data: "vi" },
-    { label: "🇧🇬 Bulgarian", data: "bg" }
+    { label: "\ud83c\udf10 Auto-detect", data: "auto" },
+    { label: "\ud83c\uddec\ud83c\udde7 English", data: "en" },
+    { label: "\ud83c\uddea\ud83c\uddf8 Spanish", data: "es" },
+    { label: "\ud83c\uddeb\ud83c\uddf7 French", data: "fr" },
+    { label: "\ud83c\udde9\ud83c\uddea German", data: "de" },
+    { label: "\ud83c\uddec\ud83c\uddf7 Greek", data: "el" },
+    { label: "\ud83c\uddee\ud83c\uddf9 Italian", data: "it" },
+    { label: "\ud83c\uddf5\ud83c\uddf9 Portuguese", data: "pt" },
+    { label: "\ud83c\uddf7\ud83c\uddfa Russian", data: "ru" },
+    { label: "\ud83c\uddef\ud83c\uddf5 Japanese", data: "ja" },
+    { label: "\ud83c\uddf0\ud83c\uddf7 Korean", data: "ko" },
+    { label: "\ud83c\udde8\ud83c\uddf3 Chinese (Simplified)", data: "zh-CN" },
+    { label: "\ud83c\uddf9\ud83c\uddfc Chinese (Traditional)", data: "zh-TW" },
+    { label: "\ud83c\uddf8\ud83c\udde6 Arabic", data: "ar" },
+    { label: "\ud83c\uddeb\ud83c\uddee Finnish", data: "fi" },
+    { label: "\ud83c\uddf3\ud83c\uddf1 Dutch", data: "nl" },
+    { label: "\ud83c\uddee\ud83c\uddf3 Hindi", data: "hi" },
+    { label: "\ud83c\uddf5\ud83c\uddf1 Polish", data: "pl" },
+    { label: "\ud83c\uddf9\ud83c\udded Thai", data: "th" },
+    { label: "\ud83c\uddf9\ud83c\uddf7 Turkish", data: "tr" },
+    { label: "\ud83c\uddfa\ud83c\udde6 Ukrainian", data: "uk" },
+    { label: "\ud83c\uddf7\ud83c\uddf4 Romanian", data: "ro" },
+    { label: "\ud83c\uddfb\ud83c\uddf3 Vietnamese", data: "vi" },
+    { label: "\ud83c\udde7\ud83c\uddec Bulgarian", data: "bg" }
 ];
 
 const selectLanguageOption = { label: "Select language...", data: "" };
@@ -65,6 +67,12 @@ const rapidocrLanguages = new Set([
     'de', 'fr', 'es', 'it', 'pt', 'nl', 'pl', 'tr', 'ro', 'vi', 'fi',
     'ru', 'uk', 'el', 'th', 'bg'
 ]);
+
+function formatBytes(bytes: number): string {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
 
 // API Key Modal Component
 const ApiKeyModal: VFC<{
@@ -108,13 +116,175 @@ const ApiKeyModal: VFC<{
     );
 };
 
+// NLLB Model Management Component
+const CT2ModelManager: VFC = () => {
+    const { settings } = useSettings();
+    const [modelStatus, setModelStatus] = useState<any>({
+        downloaded: false, size: 0, downloading: false, progress: 0, error: null
+    });
+    const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+    const refreshStatus = useCallback(async () => {
+        try {
+            const status = await call<any>('get_nllb_model_status');
+            if (status) setModelStatus(status);
+        } catch (e) { /* ignore */ }
+    }, []);
+
+    useEffect(() => { refreshStatus(); }, []);
+
+    // Poll while downloading
+    useEffect(() => {
+        if (modelStatus.downloading) {
+            pollRef.current = setInterval(refreshStatus, 500);
+        } else {
+            if (pollRef.current) {
+                clearInterval(pollRef.current);
+                pollRef.current = null;
+            }
+        }
+        return () => {
+            if (pollRef.current) clearInterval(pollRef.current);
+        };
+    }, [modelStatus.downloading, refreshStatus]);
+
+    const handleDownload = async () => {
+        await call('clear_nllb_model_error');
+        const started = await call<boolean>('download_nllb_model');
+        if (started) {
+            setModelStatus((prev: any) => ({ ...prev, downloading: true, progress: 0, error: null }));
+        }
+    };
+
+    const handleCancel = async () => {
+        await call('cancel_nllb_download');
+    };
+
+    const handleDelete = async () => {
+        await call('delete_nllb_model');
+        refreshStatus();
+    };
+
+    const isAutoDetect = settings.inputLanguage === 'auto' || settings.inputLanguage === '';
+
+    const statusDot = (
+        <div style={{
+            width: "8px",
+            height: "8px",
+            borderRadius: "50%",
+            backgroundColor: modelStatus.downloaded ? "#4caf50" : "#ff6b6b",
+            flexShrink: 0,
+        }} />
+    );
+
+    return (
+        <>
+            {isAutoDetect && (
+                <PanelSectionRow>
+                    <Field focusable={true} childrenContainerWidth="max">
+                        <div style={{ color: "#ffa726", fontSize: "12px", lineHeight: "1.5" }}>
+                            Offline translation needs a specific source language. Select one in the Languages section above.
+                        </div>
+                    </Field>
+                </PanelSectionRow>
+            )}
+
+            {/* Not downloaded, not downloading */}
+            {!modelStatus.downloaded && !modelStatus.downloading && (
+                <PanelSectionRow>
+                    <ButtonItem
+                        layout="below"
+                        icon={statusDot}
+                        label="Model not installed"
+                        description="Download required to use offline translation (~650 MB)"
+                        onClick={handleDownload}
+                    >
+                        Download model
+                    </ButtonItem>
+                </PanelSectionRow>
+            )}
+
+            {/* Downloading */}
+            {modelStatus.downloading && (
+                <>
+                    <PanelSectionRow>
+                        <Field
+                            label="Downloading model..."
+                            icon={statusDot}
+                            focusable={false}
+                            childrenContainerWidth="fixed"
+                        >
+                            <span style={{ color: "#888", fontSize: "12px" }}>
+                                {Math.round((modelStatus.progress || 0) * 100)}%
+                            </span>
+                        </Field>
+                    </PanelSectionRow>
+                    <PanelSectionRow>
+                        <Field focusable={false} childrenContainerWidth="max">
+                            <div style={{
+                                height: "6px",
+                                backgroundColor: "rgba(255,255,255,0.1)",
+                                borderRadius: "3px",
+                                overflow: "hidden",
+                            }}>
+                                <div style={{
+                                    width: `${(modelStatus.progress || 0) * 100}%`,
+                                    height: "100%",
+                                    backgroundColor: "#4caf50",
+                                    borderRadius: "3px",
+                                    transition: "width 0.3s ease",
+                                }} />
+                            </div>
+                        </Field>
+                    </PanelSectionRow>
+                    <PanelSectionRow>
+                        <ButtonItem layout="below" onClick={handleCancel}>
+                            Cancel download
+                        </ButtonItem>
+                    </PanelSectionRow>
+                </>
+            )}
+
+            {/* Downloaded */}
+            {modelStatus.downloaded && !modelStatus.downloading && (
+                <PanelSectionRow>
+                    <ButtonItem
+                        layout="below"
+                        icon={statusDot}
+                        label="Model installed - ready to use"
+                        description={formatBytes(modelStatus.size)}
+                        onClick={handleDelete}
+                    >
+                        Delete model
+                    </ButtonItem>
+                </PanelSectionRow>
+            )}
+
+            {modelStatus.error && (
+                <PanelSectionRow>
+                    <Field focusable={true} childrenContainerWidth="max">
+                        <div style={{ color: "#ff6b6b", fontSize: "12px" }}>
+                            Download failed: {modelStatus.error}
+                        </div>
+                    </Field>
+                </PanelSectionRow>
+            )}
+        </>
+    );
+};
+
 export const TabTranslation: VFC = () => {
     const { settings, updateSetting } = useSettings();
 
+    const isCT2 = settings.translationProvider === 'ct2';
+    const filteredLanguageOptions = isCT2
+        ? languageOptions.filter(lang => lang.data !== "auto")
+        : languageOptions;
+
     const placeholderOption = settings.inputLanguage === '' ? [selectLanguageOption] : [];
     const inputLanguageOptions = settings.ocrProvider === 'rapidocr'
-        ? [...placeholderOption, ...languageOptions.filter(lang => rapidocrLanguages.has(lang.data))]
-        : [...placeholderOption, ...languageOptions];
+        ? [...placeholderOption, ...filteredLanguageOptions.filter(lang => rapidocrLanguages.has(lang.data))]
+        : [...placeholderOption, ...filteredLanguageOptions];
 
     // Reset input language if it's not supported by the current OCR provider
     useEffect(() => {
@@ -124,18 +294,27 @@ export const TabTranslation: VFC = () => {
         }
     }, [settings.initialized, settings.ocrProvider]);
 
+    // When switching to CT2, if source is auto-detect, clear it so user picks a specific language
+    useEffect(() => {
+        if (settings.initialized && isCT2 && settings.inputLanguage === 'auto') {
+            updateSetting('inputLanguage', '', 'Input language');
+        }
+    }, [settings.initialized, settings.translationProvider]);
+
     return (
         <div style={{ marginLeft: "-8px", marginRight: "-8px", paddingBottom: "40px" }}>
             <PanelSection title="Languages">
                 <PanelSectionRow>
                     <DropdownItem
                         label="Input Language"
-                        description={settings.ocrProvider === 'rapidocr'
-                            ? "Source language for text recognition"
-                            : "Source language (Select auto-detect if unsure)"}
+                        description={isCT2
+                            ? "Source language (auto-detect not available for offline translation)"
+                            : settings.ocrProvider === 'rapidocr'
+                                ? "Source language for text recognition"
+                                : "Source language (Select auto-detect if unsure)"}
                         rgOptions={inputLanguageOptions}
                         selectedOption={settings.inputLanguage}
-                        onChange={(option) => updateSetting('inputLanguage', option.data, 'Input language')}
+                        onChange={(option: any) => updateSetting('inputLanguage', option.data, 'Input language')}
                     />
                 </PanelSectionRow>
 
@@ -145,7 +324,7 @@ export const TabTranslation: VFC = () => {
                         description="Target language for translation"
                         rgOptions={[...(settings.targetLanguage === '' ? [selectLanguageOption] : []), ...outputLanguageOptions]}
                         selectedOption={settings.targetLanguage}
-                        onChange={(option) => updateSetting('targetLanguage', option.data, 'Output language')}
+                        onChange={(option: any) => updateSetting('targetLanguage', option.data, 'Output language')}
                     />
                 </PanelSectionRow>
             </PanelSection>
@@ -346,7 +525,8 @@ export const TabTranslation: VFC = () => {
                             <Dropdown
                                 rgOptions={[
                                     { label: <span>Google Translate</span>, data: "freegoogle" },
-                                    { label: <span>Google Cloud</span>, data: "googlecloud" }
+                                    { label: <span>Google Cloud</span>, data: "googlecloud" },
+                                    { label: <span>Offline (NLLB)</span>, data: "ct2" }
                                 ]}
                                 selectedOption={settings.translationProvider}
                                 onChange={(option) => updateSetting('translationProvider', option.data, 'Translation provider')}
@@ -410,9 +590,24 @@ export const TabTranslation: VFC = () => {
                                     )}
                                 </>
                             )}
+                            {settings.translationProvider === 'ct2' && (
+                                <>
+                                    <div style={{ marginBottom: "8px" }}>
+                                        <span style={{ fontWeight: "bold", color: "#dcdedf" }}>Offline (NLLB)</span>
+                                    </div>
+                                    <div>- On-device translation, no internet needed</div>
+                                    <div>- Single ~650 MB model download covers all languages</div>
+                                    <div>- Auto-detect not supported, pick a source language</div>
+                                </>
+                            )}
                         </div>
                     </Field>
                 </PanelSectionRow>
+
+                {/* CT2 model management */}
+                {settings.translationProvider === 'ct2' && (
+                    <CT2ModelManager />
+                )}
 
                 {/* Invisible spacer to help with scroll when focusing last element */}
                 <PanelSectionRow>

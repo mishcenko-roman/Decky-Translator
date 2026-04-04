@@ -1454,6 +1454,14 @@ class Plugin:
                 logger.error("Provider manager not initialized")
                 return None
 
+            # Check if CT2 provider has the needed models
+            if self._translation_provider == "ct2":
+                provider = self._provider_manager.get_translation_provider()
+                if provider and not provider.is_available(input_lang, target_lang):
+                    if input_lang == "auto":
+                        return {"error": "model_not_available", "message": "Offline translation requires a specific source language. Select one in Translation settings."}
+                    return {"error": "model_not_available", "message": "Translation model not downloaded. Download it in Translation settings."}
+
             texts_to_translate = [region["text"] for region in text_regions]
 
             start_time = time.time()
@@ -1615,6 +1623,53 @@ class Plugin:
             logger.error(f"Error getting hidraw status: {e}")
             return {"success": False, "error": str(e)}
 
+    # -- NLLB model management API --
+
+    async def get_nllb_model_status(self):
+        try:
+            if not self._provider_manager:
+                return {"downloaded": False, "size": 0, "downloading": False, "progress": 0, "error": None}
+            return self._provider_manager.get_nllb_model_status()
+        except Exception as e:
+            logger.error(f"Error getting NLLB model status: {e}")
+            return {"downloaded": False, "size": 0, "downloading": False, "progress": 0, "error": str(e)}
+
+    async def download_nllb_model(self):
+        try:
+            if not self._provider_manager:
+                return False
+            return self._provider_manager.download_nllb_model()
+        except Exception as e:
+            logger.error(f"Error starting NLLB model download: {e}")
+            return False
+
+    async def delete_nllb_model(self):
+        try:
+            if not self._provider_manager:
+                return False
+            return self._provider_manager.delete_nllb_model()
+        except Exception as e:
+            logger.error(f"Error deleting NLLB model: {e}")
+            return False
+
+    async def cancel_nllb_download(self):
+        try:
+            if self._provider_manager:
+                self._provider_manager.cancel_nllb_download()
+            return True
+        except Exception as e:
+            logger.error(f"Error cancelling NLLB download: {e}")
+            return False
+
+    async def clear_nllb_model_error(self):
+        try:
+            if self._provider_manager:
+                self._provider_manager.clear_nllb_download_error()
+            return True
+        except Exception as e:
+            logger.error(f"Error clearing NLLB download error: {e}")
+            return False
+
     async def _main(self):
         logger.info("Plugin initialization started")
         try:
@@ -1667,13 +1722,18 @@ class Plugin:
                     self._translation_provider = "freegoogle"
                 self._settings.set_setting("translation_provider", self._translation_provider)
 
+            # Set up CT2 translation models directory
+            ct2_models_dir = os.path.join(settingsDir, "decky-translator", "models", "nllb")
+            os.makedirs(ct2_models_dir, exist_ok=True)
+
             # Initialize provider manager
             self._provider_manager = ProviderManager()
             self._provider_manager.configure(
                 use_free_providers=self._use_free_providers,
                 google_api_key=google_api_key,
                 ocr_provider=self._ocr_provider,
-                translation_provider=self._translation_provider
+                translation_provider=self._translation_provider,
+                ct2_models_dir=ct2_models_dir
             )
 
             # Load and apply RapidOCR-specific settings
@@ -1720,6 +1780,9 @@ class Plugin:
     async def _unload(self):
         logger.info("Unloading plugin")
         try:
+            if self._provider_manager:
+                self._provider_manager.shutdown()
+
             if self._evdev_monitor:
                 self._evdev_monitor.stop()
                 self._evdev_monitor = None

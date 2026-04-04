@@ -27,6 +27,13 @@ export class RateLimitError extends Error {
     }
 }
 
+export class ModelNotAvailableError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'ModelNotAvailableError';
+    }
+}
+
 function isErrorResponse(value: unknown): value is ErrorResponse {
     return typeof value === 'object' && value !== null && 'error' in value && 'message' in value;
 }
