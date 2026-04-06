@@ -1470,7 +1470,10 @@ class Plugin:
                 source_lang=input_lang,
                 target_lang=target_lang
             )
-            logger.info(f"Translation completed in {time.time() - start_time:.2f}s, {len(texts_to_translate)} regions")
+            elapsed = time.time() - start_time
+            logger.info(f"Translation completed in {elapsed:.2f}s, {len(texts_to_translate)} regions")
+            for i, (src, dst) in enumerate(zip(texts_to_translate, translated_texts)):
+                logger.debug(f"  [{i}] '{src}' -> '{dst}'")
 
             translated_regions = []
             for i, translated_text in enumerate(translated_texts):
@@ -1480,6 +1483,7 @@ class Plugin:
                         "translatedText": translated_text
                     })
 
+            logger.debug(f"Returning {len(translated_regions)} translated regions (from {len(text_regions)} input regions)")
             return translated_regions
 
         except NetworkError as e:
