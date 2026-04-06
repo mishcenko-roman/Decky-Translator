@@ -106,25 +106,63 @@ def main():
                 sp_tokens = tokenizer.encode(t, out_type=str)
                 tokenized.append([src_lang] + sp_tokens + ["</s>"])
 
-            # Translate with target language prefix
+            # Adapt decoding strategy based on input length.
+            # Short texts (labels, single words) are out-of-distribution for
+            # NLLB and hallucinate with beam search, so use greedy decoding
+            # with aggressive length penalty to stay close to the source.
+            max_input_tokens = max(len(t) - 2 for t in tokenized)  # minus lang + </s>
+
+            if max_input_tokens <= 4:
+                beam = 1
+                length_pen = 0.2
+                no_repeat = 3
+                max_output = max(max_input_tokens + 2, 3)
+            else:
+                beam = 4
+                length_pen = 1.0
+                no_repeat = 4
+                max_output = max(max_input_tokens * 3, 10)
+
+            max_output = min(max_output, 512)
+
             results = translator.translate_batch(
                 tokenized,
                 target_prefix=[[tgt_lang]] * len(texts),
-                beam_size=2,
-                max_decoding_length=512,
+                beam_size=beam,
+                max_decoding_length=max_output,
                 repetition_penalty=1.2,
+                length_penalty=length_pen,
+                no_repeat_ngram_size=no_repeat,
+                disable_unk=True,
+                replace_unknowns=True,
+                return_scores=True,
             )
 
-            # Detokenize: skip first token (target lang token)
+            # Detokenize and validate each translation
             translations = []
-            for result in results:
+            token_counts = []
+            for i, result in enumerate(results):
                 tokens = result.hypotheses[0]
+                score = result.scores[0]
                 if tokens and tokens[0] == tgt_lang:
                     tokens = tokens[1:]
+                input_token_count = len(tokenized[i]) - 2  # minus lang token and </s>
+                token_counts.append({"input": input_token_count, "output": len(tokens)})
                 text = tokenizer.decode(tokens)
+
+                # Hallucination guard: if the model isn't confident about a
+                # short input, or the output is way longer than the source,
+                # fall back to the original text.
+                src_text = texts[i]
+                if input_token_count <= 4:
+                    low_confidence = score < -1.5
+                    blown_up = len(text) > len(src_text) * 2.5
+                    if low_confidence or blown_up:
+                        text = src_text
+
                 translations.append(text)
 
-            return {"ok": True, "translations": translations}
+            return {"ok": True, "translations": translations, "token_counts": token_counts}
         except Exception as e:
             return {"ok": False, "error": f"Translation failed: {e}"}
 

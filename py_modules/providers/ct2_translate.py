@@ -203,14 +203,39 @@ class CT2TranslateProvider(TranslationProvider):
             if not load_result.get("ok"):
                 return texts
 
+        # Only append sentence-ending punctuation to longer texts that
+        # look like truncated sentences. Short texts (labels, menu items)
+        # get hallucinated into full sentences if we add a period.
+        SENTENCE_ENDERS = set('.!?\u3002\uff01\uff1f')
+        sanitized = []
+        for t in texts:
+            stripped = t.rstrip()
+            word_count = len(stripped.split())
+            if stripped and stripped[-1] not in SENTENCE_ENDERS and word_count > 3:
+                sanitized.append(stripped + '.')
+            else:
+                sanitized.append(stripped if stripped else t)
+
+        logger.debug(f"CT2 translate: {len(sanitized)} texts, {src_nllb} -> {tgt_nllb}")
+        for i, t in enumerate(sanitized):
+            logger.debug(f"  CT2 input[{i}]: ({len(t)} chars) {t[:200]}")
+
         result = self._send_command({
             "cmd": "translate",
-            "texts": texts,
+            "texts": sanitized,
             "src_lang": src_nllb,
             "tgt_lang": tgt_nllb,
         })
         if result.get("ok"):
-            return result.get("translations", texts)
+            translations = result.get("translations", texts)
+            for i, t in enumerate(translations):
+                src_len = len(texts[i]) if i < len(texts) else 0
+                logger.debug(f"  CT2 output[{i}]: ({len(t)} chars, input was {src_len}) {t[:200]}")
+                if src_len > 0 and len(t) < src_len * 0.3:
+                    logger.warning(f"  CT2 possible truncation: output is {len(t)}/{src_len} chars ({len(t)*100//src_len}%)")
+            if result.get("token_counts"):
+                logger.debug(f"  CT2 token counts: {result['token_counts']}")
+            return translations
         else:
             logger.error(f"Translation failed: {result.get('error')}")
             return texts
