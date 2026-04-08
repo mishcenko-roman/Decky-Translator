@@ -522,9 +522,9 @@ export const TabTranslation: VFC = () => {
                 <PanelSectionRow>
                     <Field
                         focusable={true}
-                        childrenContainerWidth="max"
+                        childrenContainerWidth="fixed"
                     >
-                        <div style={{ color: "#8b929a", fontSize: "12px", lineHeight: "1.6" }}>
+                        <div style={{ color: "#8b929a", fontSize: "12px", lineHeight: "1.6", paddingLeft: "8px" }}>
                             {settings.ocrProvider === 'rapidocr' && (
                                 <>
                                     <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
@@ -731,9 +731,9 @@ export const TabTranslation: VFC = () => {
                 <PanelSectionRow>
                     <Field
                         focusable={true}
-                        childrenContainerWidth="max"
+                        childrenContainerWidth="fixed"
                     >
-                        <div style={{ color: "#8b929a", fontSize: "12px", lineHeight: "1.6" }}>
+                        <div style={{ color: "#8b929a", fontSize: "12px", lineHeight: "1.6", paddingLeft: "8px" }}>
                             {settings.ocrProvider === 'gemini_vision' && (
                                 <>
                                     <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
