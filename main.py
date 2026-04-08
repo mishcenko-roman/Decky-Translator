@@ -916,6 +916,8 @@ class Plugin:
     # OCR API configurations - user must provide their own API key
     _google_vision_api_key: str = ""
     _google_translate_api_key: str = ""
+    _gemini_api_key: str = ""
+    _gemini_model: str = "gemini-2.5-flash"
 
     # Generic settings handlers
     async def get_setting(self, key, default=None):
@@ -942,6 +944,7 @@ class Plugin:
                     self._provider_manager.configure(
                         use_free_providers=self._use_free_providers,
                         google_api_key=value,
+                        gemini_api_key=self._gemini_api_key,
                         ocr_provider=self._ocr_provider,
                         translation_provider=self._translation_provider
                     )
@@ -952,11 +955,26 @@ class Plugin:
                     self._provider_manager.configure(
                         use_free_providers=self._use_free_providers,
                         google_api_key=value,
+                        gemini_api_key=self._gemini_api_key,
                         ocr_provider=self._ocr_provider,
                         translation_provider=self._translation_provider
                     )
             elif key == "google_translate_api_key":
                 self._google_translate_api_key = value
+            elif key == "gemini_model":
+                self._gemini_model = value
+                if self._provider_manager:
+                    self._provider_manager.set_gemini_model(value)
+            elif key == "gemini_api_key":
+                self._gemini_api_key = value
+                if self._provider_manager:
+                    self._provider_manager.configure(
+                        use_free_providers=self._use_free_providers,
+                        google_api_key=self._google_vision_api_key,
+                        gemini_api_key=value,
+                        ocr_provider=self._ocr_provider,
+                        translation_provider=self._translation_provider
+                    )
             elif key == "hold_time_translate":
                 self._hold_time_translate = value
             elif key == "hold_time_dismiss":
@@ -1005,6 +1023,7 @@ class Plugin:
                     self._provider_manager.configure(
                         use_free_providers=value,
                         google_api_key=self._google_vision_api_key,
+                        gemini_api_key=self._gemini_api_key,
                         ocr_provider=self._ocr_provider,
                         translation_provider=self._translation_provider
                     )
@@ -1017,6 +1036,7 @@ class Plugin:
                     self._provider_manager.configure(
                         use_free_providers=self._use_free_providers,
                         google_api_key=self._google_vision_api_key,
+                        gemini_api_key=self._gemini_api_key,
                         ocr_provider=value,
                         translation_provider=self._translation_provider
                     )
@@ -1027,6 +1047,7 @@ class Plugin:
                     self._provider_manager.configure(
                         use_free_providers=self._use_free_providers,
                         google_api_key=self._google_vision_api_key,
+                        gemini_api_key=self._gemini_api_key,
                         ocr_provider=self._ocr_provider,
                         translation_provider=value
                     )
@@ -1052,6 +1073,8 @@ class Plugin:
                 "google_api_key": self._google_vision_api_key,  # Single key for frontend
                 "google_vision_api_key": self._google_vision_api_key,
                 "google_translate_api_key": self._google_translate_api_key,
+                "gemini_api_key": self._gemini_api_key,
+                "gemini_model": self._gemini_model,
                 "hold_time_translate": self._settings.get_setting("hold_time_translate", 1000),
                 "hold_time_dismiss": self._settings.get_setting("hold_time_dismiss", 500),
                 "confidence_threshold": self._settings.get_setting("confidence_threshold", 0.6),
@@ -1075,6 +1098,22 @@ class Plugin:
             logger.error(f"Error getting all settings: {str(e)}")
             logger.error(traceback.format_exc())
             return {}
+
+    async def get_gemini_models(self):
+        try:
+            if not self._gemini_api_key:
+                return []
+            gemini = self._provider_manager.get_ocr_provider() if (
+                self._provider_manager and self._ocr_provider == "gemini_vision"
+            ) else None
+            if not gemini:
+                from providers.gemini_vision import GeminiVisionProvider
+                gemini = GeminiVisionProvider(api_key=self._gemini_api_key)
+            import asyncio
+            return await asyncio.to_thread(gemini.list_available_models)
+        except Exception as e:
+            logger.error(f"Error fetching Gemini models: {e}")
+            return []
 
     async def get_provider_status(self):
         try:
@@ -1428,6 +1467,11 @@ class Plugin:
                 logger.error("Provider manager not initialized")
                 return []
 
+            # If using Gemini Vision, set the target language before OCR
+            # so it can translate in the same API call
+            if self._ocr_provider == "gemini_vision":
+                self._provider_manager.set_gemini_target_language(self._target_language)
+
             start_time = time.time()
             text_regions = await self._provider_manager.recognize_text(
                 image_bytes,
@@ -1491,7 +1535,18 @@ class Plugin:
                 logger.error("Provider manager not initialized")
                 return None
 
-            texts_to_translate = [region["text"] for region in text_regions]
+            # If regions already have translatedText (e.g. from Gemini Vision),
+            # skip the translation step entirely
+            if all(r.get("translatedText") is not None for r in text_regions):
+                logger.info(f"Translation skipped: {len(text_regions)} regions already translated by OCR provider")
+                return text_regions
+
+            # Only translate regions that don't already have translatedText
+            needs_translation = [
+                (i, region) for i, region in enumerate(text_regions)
+                if region.get("translatedText") is None
+            ]
+            texts_to_translate = [region["text"] for _, region in needs_translation]
 
             start_time = time.time()
             translated_texts = await self._provider_manager.translate_text(
@@ -1501,12 +1556,16 @@ class Plugin:
             )
             logger.info(f"Translation completed in {time.time() - start_time:.2f}s, {len(texts_to_translate)} regions")
 
+            # Merge: use existing translatedText where available, API results for the rest
+            translation_iter = iter(translated_texts)
             translated_regions = []
-            for i, translated_text in enumerate(translated_texts):
-                if i < len(text_regions):
+            for region in text_regions:
+                if region.get("translatedText") is not None:
+                    translated_regions.append(region)
+                else:
                     translated_regions.append({
-                        **text_regions[i],
-                        "translatedText": translated_text
+                        **region,
+                        "translatedText": next(translation_iter, region["text"])
                     })
 
             return translated_regions
@@ -1686,6 +1745,11 @@ class Plugin:
                 self._google_vision_api_key = google_api_key
                 self._google_translate_api_key = google_api_key
 
+            gemini_api_key = self._settings.get_setting("gemini_api_key", "")
+            if gemini_api_key:
+                self._gemini_api_key = gemini_api_key
+            self._gemini_model = self._settings.get_setting("gemini_model", "gemini-2.5-flash")
+
             saved_ocr_provider = self._settings.get_setting("ocr_provider")
             if saved_ocr_provider is not None:
                 self._ocr_provider = saved_ocr_provider
@@ -1709,6 +1773,7 @@ class Plugin:
             self._provider_manager.configure(
                 use_free_providers=self._use_free_providers,
                 google_api_key=google_api_key,
+                gemini_api_key=gemini_api_key,
                 ocr_provider=self._ocr_provider,
                 translation_provider=self._translation_provider
             )

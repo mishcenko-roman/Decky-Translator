@@ -21,9 +21,11 @@ export interface Settings {
     pauseGameOnOverlay: boolean; // Setting to control pausing game when overlay is shown
     quickToggleEnabled: boolean; // Quick toggle overlay with right button in combo modes
     useFreeProviders: boolean; // Use free providers (OCR.space + free Google Translate) - deprecated, use ocrProvider
-    ocrProvider: 'rapidocr' | 'ocrspace' | 'googlecloud'; // OCR provider: rapidocr (RapidOCR), ocrspace (OCR.space), googlecloud (Google Cloud)
-    translationProvider: 'freegoogle' | 'googlecloud'; // Translation provider: freegoogle (Free Google Translate), googlecloud (Google Cloud Translation)
+    ocrProvider: 'rapidocr' | 'ocrspace' | 'googlecloud' | 'gemini_vision'; // OCR provider
+    translationProvider: 'freegoogle' | 'googlecloud'; // Translation provider
     googleApiKey: string; // Google Cloud Vision API key for text recognition
+    geminiApiKey: string; // Gemini API key for Gemini Vision (free tier available)
+    geminiModel: string; // Gemini model to use
     debugMode: boolean; // Debug mode for verbose console logging
     fontScale: number; // Overlay font scale multiplier for external monitors
     groupingPower: number; // Text grouping aggressiveness (0.25 normal - 1.0 huge)
@@ -60,6 +62,8 @@ const initialSettings: Settings = {
     ocrProvider: "rapidocr", // Default to rapidocr (RapidOCR) provider
     translationProvider: "freegoogle", // Default to free Google Translate
     googleApiKey: "", // Empty by default, only needed for Google Cloud
+    geminiApiKey: "", // Empty by default, needed for Gemini Vision
+    geminiModel: "gemini-2.5-flash", // Default Gemini model
     debugMode: false, // Debug mode off by default
     fontScale: 1.0,
     groupingPower: 0.25,
@@ -131,7 +135,9 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({
                     ocrProvider: serverSettings.ocr_provider || "rapidocr", // OCR provider setting
                     translationProvider: serverSettings.translation_provider || "freegoogle", // Translation provider setting
                     googleApiKey: serverSettings.google_api_key || "", // Google API key
-                    debugMode: serverSettings.debug_mode || false, // Debug mode
+                    geminiApiKey: serverSettings.gemini_api_key || "", // Gemini API key
+                    geminiModel: serverSettings.gemini_model || "gemini-2.5-flash",
+                    debugMode: serverSettings.debug_mode || false,
                     fontScale: serverSettings.font_scale ?? 1.0,
                     groupingPower: serverSettings.grouping_power ?? 0.25,
                     translatedTextAlignment: serverSettings.translated_text_alignment ?? 'justify',
@@ -161,6 +167,7 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({
                 logic.setOcrProvider(serverSettings.ocr_provider || "rapidocr");
                 logic.setTranslationProvider(serverSettings.translation_provider || "freegoogle");
                 logic.setHasGoogleApiKey(!!serverSettings.google_api_key);
+                logic.setHasGeminiApiKey(!!serverSettings.gemini_api_key);
 
                 logic.setFontScale(serverSettings.font_scale ?? 1.0);
                 logic.setGroupingPower(serverSettings.grouping_power ?? 0.25);
@@ -207,6 +214,8 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({
                 ocrProvider: 'ocr_provider',
                 translationProvider: 'translation_provider',
                 googleApiKey: 'google_api_key',
+                geminiApiKey: 'gemini_api_key',
+                geminiModel: 'gemini_model',
                 debugMode: 'debug_mode',
                 fontScale: 'font_scale',
                 groupingPower: 'grouping_power',
@@ -284,6 +293,9 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({
                     break;
                 case 'googleApiKey':
                     logic.setHasGoogleApiKey(!!value);
+                    break;
+                case 'geminiApiKey':
+                    logic.setHasGeminiApiKey(!!value);
                     break;
             }
 

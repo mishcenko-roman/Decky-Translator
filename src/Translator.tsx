@@ -31,6 +31,7 @@ export class GameTranslatorLogic {
     private ocrProvider: string = "rapidocr";
     private translationProvider: string = "freegoogle";
     private hasGoogleApiKey: boolean = false;
+    private hasGeminiApiKey: boolean = false;
 
     isOverlayVisible(): boolean {
         return this.imageState.isVisible();
@@ -348,7 +349,7 @@ export class GameTranslatorLogic {
         const apiKeyCheck = this.requiresApiKeyButMissing();
         if (apiKeyCheck.missing) {
             logger.warn('Translator', `Cannot start translation: ${apiKeyCheck.message}`);
-            this.notify(apiKeyCheck.message, 3000, "Please configure your Google Cloud API key in settings or switch to a free provider.");
+            this.notify(apiKeyCheck.message, 3000, "Please configure your API key in the Translation settings tab.");
             return;
         }
 
@@ -389,10 +390,12 @@ export class GameTranslatorLogic {
                     logger.info('Translator', `Found ${textRegions.length} text regions`);
 
                     if (textRegions.length > 0) {
-                        // Update processing step to translation
-                        this.imageState.updateProcessingStep("Translating text");
+                        const alreadyTranslated = textRegions.every(r => r.translatedText);
+                        if (!alreadyTranslated) {
+                            this.imageState.updateProcessingStep("Translating text");
+                        }
 
-                        // Translate text
+                        // Translate text (skips backend call if already translated by OCR provider)
                         let translatedRegions = await this.textTranslator.translateText(textRegions);
                         logger.info('Translator', `Translation complete: ${translatedRegions.length} regions`);
 
@@ -429,7 +432,8 @@ export class GameTranslatorLogic {
 
             // Check if this is a network error
             if (error instanceof NetworkError) {
-                this.imageState.updateProcessingStep("No internet connection");
+                const msg = error.message || "No internet connection";
+                this.imageState.updateProcessingStep(msg);
                 // Hide overlay after showing the error message
                 setTimeout(() => {
                     this.imageState.hideImage();
@@ -553,8 +557,17 @@ export class GameTranslatorLogic {
         logger.debug('Translator', `Google API key available: ${hasKey}`);
     }
 
+    setHasGeminiApiKey = (hasKey: boolean): void => {
+        this.hasGeminiApiKey = hasKey;
+        logger.debug('Translator', `Gemini API key available: ${hasKey}`);
+    }
+
     // Check if the current provider configuration requires an API key that's missing
     private requiresApiKeyButMissing(): { missing: boolean; message: string } {
+        if (this.ocrProvider === 'gemini_vision' && !this.hasGeminiApiKey) {
+            return { missing: true, message: "Gemini API key required for Gemini Vision" };
+        }
+
         const ocrNeedsKey = this.ocrProvider === 'googlecloud';
         const translationNeedsKey = this.translationProvider === 'googlecloud';
 
