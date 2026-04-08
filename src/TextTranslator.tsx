@@ -1,7 +1,7 @@
 // TextTranslator.tsx
 
 import { call } from "@decky/api";
-import { TextRegion, NetworkError, ApiKeyError, ErrorResponse } from "./TextRecognizer";
+import { TextRegion, NetworkError, ApiKeyError, ModelNotAvailableError, ErrorResponse } from "./TextRecognizer";
 import { logger } from "./Logger";
 
 // Type guard to check if response is an error
@@ -66,7 +66,10 @@ export class TextTranslator {
                         logger.error('TextTranslator', `API key error: ${errorResponse.message}`);
                         throw new ApiKeyError(errorResponse.message);
                     }
-                    // Handle other error types if needed
+                    if (errorResponse.error === 'model_not_available') {
+                        logger.error('TextTranslator', `Model not available: ${errorResponse.message}`);
+                        throw new ModelNotAvailableError(errorResponse.message);
+                    }
                     logger.error('TextTranslator', `Error from backend: ${errorResponse.error} - ${errorResponse.message}`);
                     // Return original text on error
                     return textRegions.map(region => ({
@@ -86,8 +89,8 @@ export class TextTranslator {
                 translatedText: region.text
             }));
         } catch (error) {
-            // Re-throw NetworkError and ApiKeyError to be handled by caller
-            if (error instanceof NetworkError || error instanceof ApiKeyError) {
+            // Re-throw known errors to be handled by caller
+            if (error instanceof NetworkError || error instanceof ApiKeyError || error instanceof ModelNotAvailableError) {
                 throw error;
             }
             logger.error('TextTranslator', 'Text translation error', error);

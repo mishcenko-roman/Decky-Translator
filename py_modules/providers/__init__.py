@@ -19,6 +19,8 @@ from .ocrspace import OCRSpaceProvider
 from .free_translate import FreeTranslateProvider
 from .rapidocr_provider import RapidOCRProvider
 from .gemini_vision import GeminiVisionProvider
+from .ct2_translate import CT2TranslateProvider
+from .model_manager import ModelManager
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +39,8 @@ __all__ = [
     'FreeTranslateProvider',
     'RapidOCRProvider',
     'GeminiVisionProvider',
+    'CT2TranslateProvider',
+    'ModelManager',
     'ProviderManager',
 ]
 
@@ -57,10 +61,14 @@ class ProviderManager:
         self._gemini_model = "gemini-2.5-flash"
         self._gemini_target_language = "en"
         self._ocr_provider_preference = "rapidocr"  # "rapidocr", "ocrspace", "googlecloud", or "gemini_vision"
-        self._translation_provider_preference = "freegoogle"  # "freegoogle" or "googlecloud"
+        self._translation_provider_preference = "freegoogle"  # "freegoogle", "googlecloud", or "ct2"
         self._rapidocr_confidence = 0.5  # Default RapidOCR confidence threshold (0.0-1.0)
         self._rapidocr_box_thresh = 0.5  # Default RapidOCR box detection threshold (0.0-1.0)
         self._rapidocr_unclip_ratio = 1.6  # Default RapidOCR box expansion ratio (1.0-3.0)
+
+        # CT2 translation
+        self._ct2_models_dir = None
+        self._model_manager = None
 
         logger.debug("ProviderManager initialized")
 
@@ -70,7 +78,8 @@ class ProviderManager:
         google_api_key: str = "",
         gemini_api_key: str = "",
         ocr_provider: str = "",
-        translation_provider: str = ""
+        translation_provider: str = "",
+        ct2_models_dir: str = ""
     ) -> None:
         """
         Configure provider preferences.
@@ -81,8 +90,13 @@ class ProviderManager:
                                 (Deprecated: use ocr_provider and translation_provider instead)
             google_api_key: Google Cloud API key (only needed for googlecloud providers)
             ocr_provider: OCR provider preference - "rapidocr", "ocrspace", or "googlecloud"
-            translation_provider: Translation provider preference - "freegoogle" or "googlecloud"
+            translation_provider: Translation provider preference - "freegoogle", "googlecloud", or "ct2"
+            ct2_models_dir: Directory for CT2 translation model storage
         """
+        if ct2_models_dir:
+            self._ct2_models_dir = ct2_models_dir
+            if not self._model_manager:
+                self._model_manager = ModelManager(ct2_models_dir)
         self._google_api_key = google_api_key
         self._gemini_api_key = gemini_api_key
 
@@ -239,6 +253,8 @@ class ProviderManager:
             # Use translation provider preference (independent of OCR choice)
             if self._translation_provider_preference == "googlecloud":
                 provider_type = ProviderType.GOOGLE
+            elif self._translation_provider_preference == "ct2":
+                provider_type = ProviderType.CT2
             else:
                 provider_type = ProviderType.FREE_GOOGLE
 
@@ -249,6 +265,11 @@ class ProviderManager:
                 self._translation_providers[provider_type] = GoogleTranslateProvider(
                     self._google_api_key
                 )
+            elif provider_type == ProviderType.CT2:
+                if self._model_manager:
+                    self._translation_providers[provider_type] = CT2TranslateProvider(
+                        model_manager=self._model_manager
+                    )
 
         return self._translation_providers.get(provider_type)
 
@@ -343,3 +364,51 @@ class ProviderManager:
         status["rapidocr_error"] = rapidocr.get_init_error()
 
         return status
+
+    # -- NLLB model management --
+
+    def is_nllb_model_downloaded(self):
+        if self._model_manager:
+            return self._model_manager.is_model_downloaded()
+        return False
+
+    def get_nllb_model_status(self):
+        if not self._model_manager:
+            return {"downloaded": False, "size": 0, "downloading": False, "progress": 0, "error": None}
+        dl_status = self._model_manager.get_download_status()
+        return {
+            "downloaded": self._model_manager.is_model_downloaded(),
+            "size": self._model_manager.get_model_size(),
+            "downloading": dl_status["downloading"],
+            "progress": dl_status["progress"],
+            "error": dl_status["error"],
+        }
+
+    def download_nllb_model(self):
+        if self._model_manager:
+            return self._model_manager.start_download()
+        return False
+
+    def delete_nllb_model(self):
+        if self._model_manager:
+            ct2 = self._translation_providers.get(ProviderType.CT2)
+            if ct2 and hasattr(ct2, '_loaded_model_dir'):
+                model_dir = self._model_manager.get_model_dir()
+                if ct2._loaded_model_dir == model_dir:
+                    ct2.unload_current_model()
+            return self._model_manager.delete_model()
+        return False
+
+    def cancel_nllb_download(self):
+        if self._model_manager:
+            self._model_manager.cancel_download()
+
+    def clear_nllb_download_error(self):
+        if self._model_manager:
+            self._model_manager.clear_download_error()
+
+    def shutdown(self):
+        """Clean up CT2 translation worker subprocess."""
+        ct2 = self._translation_providers.get(ProviderType.CT2)
+        if ct2 and hasattr(ct2, 'shutdown'):
+            ct2.shutdown()

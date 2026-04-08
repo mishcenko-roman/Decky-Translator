@@ -7,3 +7,5 @@ requests==2.32.3
 urllib3==2.4.0
 rapidocr>=3.6.0
 onnxruntime>=1.7.0
+ctranslate2>=4.5.0
+sentencepiece>=0.2.0

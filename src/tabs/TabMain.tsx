@@ -196,7 +196,8 @@ export const TabMain: VFC<TabMainProps> = ({ logic, overlayVisible, providerStat
                                     <span style={{ color: '#888' }}>Translation:</span>
                                     <span style={{ marginLeft: '6px', fontWeight: 'bold' }}>
                                         {settings.ocrProvider === 'gemini_vision' ? 'Gemini Vision' :
-                                         settings.translationProvider === 'googlecloud' ? 'Google Cloud' : 'Google Translate'}
+                                         settings.translationProvider === 'googlecloud' ? 'Google Cloud' :
+                                         settings.translationProvider === 'ct2' ? 'Offline (NLLB)' : 'Google Translate'}
                                     </span>
                                 </div>
                                 <div style={{ marginLeft: '22px', marginBottom: '6px' }}>
@@ -211,7 +212,7 @@ export const TabMain: VFC<TabMainProps> = ({ logic, overlayVisible, providerStat
                                         </div>
                                     )}
                                     <div style={{ color: '#666', fontSize: '10px' }}>
-                                        Requires internet connection
+                                        {settings.translationProvider === 'ct2' ? 'No internet needed' : 'Requires internet connection'}
                                     </div>
                                 </div>
                             </div>

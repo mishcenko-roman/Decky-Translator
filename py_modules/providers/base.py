@@ -29,6 +29,7 @@ class ProviderType(Enum):
     FREE_GOOGLE = "freegoogle"  # Free Google Translate via deep-translator
     RAPIDOCR = "rapidocr"       # Local RapidOCR via ONNX Runtime (no internet required)
     GEMINI_VISION = "gemini_vision"  # Gemini Vision (OCR + translation in one step)
+    CT2 = "ct2"                 # CTranslate2 translation
 
 
 @dataclass
