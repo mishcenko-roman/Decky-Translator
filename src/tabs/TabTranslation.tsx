@@ -31,6 +31,8 @@ import googletranslateLogo from "../../assets/googletranslate-logo.png";
 import rapidocrLogo from "../../assets/rapidocr-logo.png";
 // @ts-ignore
 import geminiLogo from "../../assets/gemini-logo.png";
+// @ts-ignore
+import steamdeckLogo from "../../assets/steamdeck-logo.png";
 
 // Language options with flag emojis
 const languageOptions = [
@@ -527,8 +529,8 @@ export const TabTranslation: VFC = () => {
                             {settings.ocrProvider === 'rapidocr' && (
                                 <>
                                     <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-                                        <img src={rapidocrLogo} alt="" style={{ height: "18px" }} />
-                                        <span style={{ fontWeight: "bold", color: "#dcdedf" }}>RapidOCR</span>
+                                        <img src={steamdeckLogo} alt="" style={{ height: "18px" }} />
+                                        <span style={{ fontWeight: "bold", color: "#dcdedf" }}>On-Device (RapidOCR)</span>
                                     </div>
                                     <ProviderRating quality={1} speed={1} />
                                     <div>- On-Device Text Recognition</div>
@@ -770,8 +772,9 @@ export const TabTranslation: VFC = () => {
                             )}
                             {settings.translationProvider === 'ct2' && (
                                 <>
-                                    <div style={{ marginBottom: "8px" }}>
-                                        <span style={{ fontWeight: "bold", color: "#dcdedf" }}>Offline (NLLB)</span>
+                                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                                        <img src={steamdeckLogo} alt="" style={{ height: "18px" }} />
+                                        <span style={{ fontWeight: "bold", color: "#dcdedf" }}>On-Device (NLLB)</span>
                                     </div>
                                     <ProviderRating quality={1} speed={1} />
                                     <div>- On-device translation, no internet needed</div>
