@@ -20,7 +20,7 @@ import { VFC, useState, useEffect, useRef, useCallback } from "react";
 import { call } from "@decky/api";
 import { useSettings } from "../SettingsContext";
 import { HiKey, HiLockClosed } from "react-icons/hi2";
-import { BsArrowRepeat } from "react-icons/bs";
+import { BsArrowRepeat, BsStars } from "react-icons/bs";
 
 // @ts-ignore
 import ocrspaceLogo from "../../assets/ocrspace-logo.png";
@@ -443,7 +443,7 @@ export const TabTranslation: VFC = () => {
                                     { label: <span>On-Device</span>, data: "rapidocr" },
                                     { label: <span>OCR.space</span>, data: "ocrspace" },
                                     { label: <span>Google Cloud</span>, data: "googlecloud" },
-                                    { label: <span>Gemini Vision</span>, data: "gemini_vision" }
+                                    { label: <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>Gemini Vision <BsStars style={{ fontSize: "12px" }} /></span>, data: "gemini_vision" }
                                 ]}
                                 selectedOption={settings.ocrProvider}
                                 onChange={(option) => {
@@ -568,7 +568,7 @@ export const TabTranslation: VFC = () => {
                                 <>
                                     <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
                                         <img src={geminiLogo} alt="" style={{ height: "18px" }} />
-                                        <span style={{ fontWeight: "bold", color: "#dcdedf" }}>Gemini Vision (Google AI)</span>
+                                        <span style={{ fontWeight: "bold", color: "#dcdedf" }}>Gemini Vision</span>
                                     </div>
                                     <ProviderRating quality={3} speed={1} />
                                     <div>- AI-based Recognition and Translation</div>
@@ -679,7 +679,7 @@ export const TabTranslation: VFC = () => {
                         {settings.ocrProvider === 'gemini_vision' ? (
                             <Dropdown
                                 rgOptions={[
-                                    { label: <span style={{ display: "flex", alignItems: "center", gap: "6px" }}><HiLockClosed style={{ fontSize: "12px", color: "#888" }} /> Gemini Vision</span>, data: "gemini_vision" }
+                                    { label: <span style={{ display: "flex", alignItems: "center", gap: "6px" }}><HiLockClosed style={{ fontSize: "12px", color: "#888" }} /> Gemini Vision <BsStars style={{ fontSize: "12px" }} /></span>, data: "gemini_vision" }
                                 ]}
                                 selectedOption="gemini_vision"
                                 disabled={true}
