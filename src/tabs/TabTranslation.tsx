@@ -354,6 +354,24 @@ const CT2ModelManager: VFC = () => {
     );
 };
 
+const StarRating: VFC<{ label: string; filled: number; total?: number }> = ({ label, filled, total = 3 }) => (
+    <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+        <span style={{ color: "#888", fontSize: "11px" }}>{label}</span>
+        {Array.from({ length: total }, (_, i) => (
+            <svg key={i} width="10" height="10" viewBox="0 0 24 24" fill={i < filled ? "#ffa726" : "#444"}>
+                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/>
+            </svg>
+        ))}
+    </span>
+);
+
+const ProviderRating: VFC<{ quality: number; speed: number }> = ({ quality, speed }) => (
+    <div style={{ display: "flex", gap: "16px", marginBottom: "6px" }}>
+        <StarRating label="Quality" filled={quality} />
+        <StarRating label="Speed" filled={speed} />
+    </div>
+);
+
 export const TabTranslation: VFC = () => {
     const { settings, updateSetting } = useSettings();
 
@@ -512,8 +530,8 @@ export const TabTranslation: VFC = () => {
                                         <img src={rapidocrLogo} alt="" style={{ height: "18px" }} />
                                         <span style={{ fontWeight: "bold", color: "#dcdedf" }}>RapidOCR</span>
                                     </div>
+                                    <ProviderRating quality={1} speed={1} />
                                     <div>- On-Device Text Recognition</div>
-                                    <div>- Average accuracy and slower than web-based options</div>
                                     <div>- Customizable parameters</div>
                                     <div>- Screenshots do not leave your device</div>
                                 </>
@@ -524,9 +542,9 @@ export const TabTranslation: VFC = () => {
                                         <img src={ocrspaceLogo} alt="" style={{ height: "18px" }} />
                                         <span style={{ fontWeight: "bold", color: "#dcdedf" }}>OCR.space</span>
                                     </div>
+                                    <ProviderRating quality={2} speed={3} />
                                     <div>- Free EU-based cloud OCR API</div>
                                     <div>- Max usage limits: 500/day and 10/10min</div>
-                                    <div>- Provides good speed and results</div>
                                 </>
                             )}
                             {settings.ocrProvider === 'googlecloud' && (
@@ -535,6 +553,7 @@ export const TabTranslation: VFC = () => {
                                         <img src={googlecloudLogo} alt="" style={{ height: "18px" }} />
                                         <span style={{ fontWeight: "bold", color: "#dcdedf" }}>Google Cloud Vision</span>
                                     </div>
+                                    <ProviderRating quality={3} speed={3} />
                                     <div>- Best accuracy and speed available</div>
                                     <div>- Ideal for complex/stylized text</div>
                                     <div>- Requires API key</div>
@@ -549,6 +568,7 @@ export const TabTranslation: VFC = () => {
                                         <img src={geminiLogo} alt="" style={{ height: "18px" }} />
                                         <span style={{ fontWeight: "bold", color: "#dcdedf" }}>Gemini Vision (Google AI)</span>
                                     </div>
+                                    <ProviderRating quality={3} speed={1} />
                                     <div>- AI-based Recognition and Translation</div>
                                     <div>- Great accuracy, context-aware translations</div>
                                     <div>- Free API key available at aistudio.google.com</div>
@@ -718,6 +738,7 @@ export const TabTranslation: VFC = () => {
                                         <img src={geminiLogo} alt="" style={{ height: "18px" }} />
                                         <span style={{ fontWeight: "bold", color: "#dcdedf" }}>Gemini Vision</span>
                                     </div>
+                                    <ProviderRating quality={3} speed={1} />
                                     <div>- Translation is handled by Gemini Vision</div>
                                     <div>- OCR and translation happen in a single step</div>
                                 </>
@@ -728,6 +749,7 @@ export const TabTranslation: VFC = () => {
                                         <img src={googletranslateLogo} alt="" style={{ height: "18px" }} />
                                         <span style={{ fontWeight: "bold", color: "#dcdedf" }}>Google Translate</span>
                                     </div>
+                                    <ProviderRating quality={2} speed={3} />
                                     <div>- Free, no API key needed</div>
                                     <div>- Good quality for most languages</div>
                                 </>
@@ -738,8 +760,8 @@ export const TabTranslation: VFC = () => {
                                         <img src={googlecloudLogo} alt="" style={{ height: "18px" }} />
                                         <span style={{ fontWeight: "bold", color: "#dcdedf" }}>Google Cloud Translation</span>
                                     </div>
+                                    <ProviderRating quality={3} speed={3} />
                                     <div>- High quality translations</div>
-                                    <div>- Very quick</div>
                                     <div>- Requires API key</div>
                                     {!settings.googleApiKey && (
                                         <div style={{ color: "#ff6b6b", marginTop: "4px" }}>You need to add your API Key</div>
@@ -751,6 +773,7 @@ export const TabTranslation: VFC = () => {
                                     <div style={{ marginBottom: "8px" }}>
                                         <span style={{ fontWeight: "bold", color: "#dcdedf" }}>Offline (NLLB)</span>
                                     </div>
+                                    <ProviderRating quality={1} speed={1} />
                                     <div>- On-device translation, no internet needed</div>
                                     <div>- Single ~650 MB model download covers all languages</div>
                                     <div>- Auto-detect not supported, pick a source language</div>
