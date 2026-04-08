@@ -28,6 +28,7 @@ class ProviderType(Enum):
     OCR_SPACE = "ocrspace"      # OCR.space (free, no key needed)
     FREE_GOOGLE = "freegoogle"  # Free Google Translate via deep-translator
     RAPIDOCR = "rapidocr"       # Local RapidOCR via ONNX Runtime (no internet required)
+    GEMINI_VISION = "gemini_vision"  # Gemini Vision (OCR + translation in one step)
 
 
 @dataclass
@@ -38,6 +39,7 @@ class TextRegion:
     confidence: float = 0.0
     is_dialog: bool = False
     bg_color: Optional[List[int]] = None  # [R, G, B] average background color
+    translated_text: Optional[str] = None  # Pre-translated text
 
     def to_dict(self) -> Dict:
         """Convert to dictionary for JSON serialization."""
@@ -49,6 +51,8 @@ class TextRegion:
         }
         if self.bg_color is not None:
             d["bgColor"] = self.bg_color
+        if self.translated_text is not None:
+            d["translatedText"] = self.translated_text
         return d
 
 

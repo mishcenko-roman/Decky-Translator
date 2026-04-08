@@ -50,6 +50,7 @@ export interface TextRegion {
     indent?: number;
     typographyType?: string;
     alignment?: string;
+    translatedText?: string;  // Pre-translated text from combined OCR+translation providers
 }
 
 // Union-Find with path compression and union by rank.
@@ -368,6 +369,7 @@ export class TextRecognizer {
                 });
 
             let combinedText = sorted[0].text;
+            let combinedTranslatedText = sorted[0].translatedText ?? null;
             let combinedRect = { ...sorted[0].rect };
             let isDialog = sorted[0].isDialog;
             let confidenceSum = sorted[0].confidence ?? 0;
@@ -388,6 +390,9 @@ export class TextRecognizer {
                     : "\n";
 
                 combinedText += separator + region.text;
+                if (combinedTranslatedText !== null && region.translatedText) {
+                    combinedTranslatedText += separator + region.translatedText;
+                }
 
                 combinedRect = {
                     left: Math.min(combinedRect.left, region.rect.left),
@@ -414,6 +419,9 @@ export class TextRecognizer {
                 rect: combinedRect,
                 isDialog,
             };
+            if (combinedTranslatedText !== null) {
+                result.translatedText = combinedTranslatedText;
+            }
             if (confidenceCount > 0) {
                 result.confidence = confidenceSum / confidenceCount;
             }

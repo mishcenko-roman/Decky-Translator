@@ -18,6 +18,7 @@ from .google_translate import GoogleTranslateProvider
 from .ocrspace import OCRSpaceProvider
 from .free_translate import FreeTranslateProvider
 from .rapidocr_provider import RapidOCRProvider
+from .gemini_vision import GeminiVisionProvider
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,7 @@ __all__ = [
     'OCRSpaceProvider',
     'FreeTranslateProvider',
     'RapidOCRProvider',
+    'GeminiVisionProvider',
     'ProviderManager',
 ]
 
@@ -51,7 +53,10 @@ class ProviderManager:
         # Configuration
         self._use_free_providers = True  # Default to free providers
         self._google_api_key = ""
-        self._ocr_provider_preference = "rapidocr"  # "rapidocr", "ocrspace", or "googlecloud"
+        self._gemini_api_key = ""
+        self._gemini_model = "gemini-2.5-flash"
+        self._gemini_target_language = "en"
+        self._ocr_provider_preference = "rapidocr"  # "rapidocr", "ocrspace", "googlecloud", or "gemini_vision"
         self._translation_provider_preference = "freegoogle"  # "freegoogle" or "googlecloud"
         self._rapidocr_confidence = 0.5  # Default RapidOCR confidence threshold (0.0-1.0)
         self._rapidocr_box_thresh = 0.5  # Default RapidOCR box detection threshold (0.0-1.0)
@@ -63,6 +68,7 @@ class ProviderManager:
         self,
         use_free_providers: bool = True,
         google_api_key: str = "",
+        gemini_api_key: str = "",
         ocr_provider: str = "",
         translation_provider: str = ""
     ) -> None:
@@ -78,6 +84,7 @@ class ProviderManager:
             translation_provider: Translation provider preference - "freegoogle" or "googlecloud"
         """
         self._google_api_key = google_api_key
+        self._gemini_api_key = gemini_api_key
 
         # Handle ocr_provider setting (new way)
         if ocr_provider:
@@ -106,11 +113,29 @@ class ProviderManager:
         if ProviderType.GOOGLE in self._translation_providers:
             self._translation_providers[ProviderType.GOOGLE].set_api_key(google_api_key)
 
+        # Update Gemini Vision provider with new API key
+        if ProviderType.GEMINI_VISION in self._ocr_providers:
+            self._ocr_providers[ProviderType.GEMINI_VISION].set_api_key(gemini_api_key)
+
         logger.debug(
             f"Provider config updated: ocr_provider={self._ocr_provider_preference}, "
             f"translation_provider={self._translation_provider_preference}, "
             f"google_api_key_set={bool(google_api_key)}"
         )
+
+    def set_gemini_target_language(self, target_lang: str) -> None:
+        """Update the Gemini Vision provider's target language before each OCR call."""
+        self._gemini_target_language = target_lang
+        gemini = self._ocr_providers.get(ProviderType.GEMINI_VISION)
+        if gemini:
+            gemini.set_target_language(target_lang)
+
+    def set_gemini_model(self, model: str) -> None:
+        """Update the Gemini model. Recreates the provider on next use if model changed."""
+        if self._gemini_model != model:
+            self._gemini_model = model
+            # Remove cached provider so it gets recreated with the new model
+            self._ocr_providers.pop(ProviderType.GEMINI_VISION, None)
 
     def set_rapidocr_confidence(self, confidence: float) -> None:
         """
@@ -171,6 +196,8 @@ class ProviderManager:
                 provider_type = ProviderType.RAPIDOCR
             elif self._ocr_provider_preference == "ocrspace":
                 provider_type = ProviderType.OCR_SPACE
+            elif self._ocr_provider_preference == "gemini_vision":
+                provider_type = ProviderType.GEMINI_VISION
             else:  # "googlecloud"
                 provider_type = ProviderType.GOOGLE
 
@@ -185,6 +212,13 @@ class ProviderManager:
                 self._ocr_providers[provider_type] = GoogleVisionProvider(
                     self._google_api_key
                 )
+            elif provider_type == ProviderType.GEMINI_VISION:
+                provider = GeminiVisionProvider(
+                    api_key=self._gemini_api_key,
+                    model=self._gemini_model,
+                )
+                provider.set_target_language(self._gemini_target_language)
+                self._ocr_providers[provider_type] = provider
 
         return self._ocr_providers.get(provider_type)
 
@@ -286,6 +320,7 @@ class ProviderManager:
             "ocr_provider_preference": self._ocr_provider_preference,
             "translation_provider_preference": self._translation_provider_preference,
             "google_api_configured": bool(self._google_api_key),
+            "gemini_api_configured": bool(self._gemini_api_key),
             "ocr_provider": ocr_provider.name if ocr_provider else "None",
             "translation_provider": trans_provider.name if trans_provider else "None",
             "ocr_available": ocr_provider.is_available() if ocr_provider else False,

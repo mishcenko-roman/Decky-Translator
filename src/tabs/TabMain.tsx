@@ -76,7 +76,8 @@ export const TabMain: VFC<TabMainProps> = ({ logic, overlayVisible, providerStat
                                     <span style={{ color: '#888' }}>Text Recognition:</span>
                                     <span style={{ marginLeft: '6px', fontWeight: 'bold' }}>
                                         {settings.ocrProvider === 'rapidocr' ? 'RapidOCR' :
-                                         settings.ocrProvider === 'ocrspace' ? 'OCR.space' : 'Google Cloud'}
+                                         settings.ocrProvider === 'ocrspace' ? 'OCR.space' :
+                                         settings.ocrProvider === 'gemini_vision' ? 'Gemini Vision' : 'Google Cloud'}
                                     </span>
                                 </div>
                                 {/* Show RapidOCR status */}
@@ -92,6 +93,14 @@ export const TabMain: VFC<TabMainProps> = ({ logic, overlayVisible, providerStat
                                                 {providerStatus?.rapidocr_error || 'Not available - RapidOCR not initialized'}
                                             </span>
                                         )}
+                                    </div>
+                                )}
+                                {/* Show Gemini Vision status */}
+                                {settings.ocrProvider === 'gemini_vision' && (
+                                    <div style={{ marginLeft: '22px', marginBottom: '6px' }}>
+                                        <div style={{ color: settings.geminiApiKey ? '#666' : '#ff6b6b', fontSize: '10px' }}>
+                                            {settings.geminiApiKey ? 'API key configured' : 'API key required'}
+                                        </div>
                                     </div>
                                 )}
                                 {/* Show OCR.space usage stats right under text recognition */}
@@ -186,11 +195,17 @@ export const TabMain: VFC<TabMainProps> = ({ logic, overlayVisible, providerStat
                                     <BsTranslate style={{ marginRight: '8px', color: '#aaa' }} />
                                     <span style={{ color: '#888' }}>Translation:</span>
                                     <span style={{ marginLeft: '6px', fontWeight: 'bold' }}>
-                                        {settings.translationProvider === 'googlecloud' ? 'Google Cloud' : 'Google Translate'}
+                                        {settings.ocrProvider === 'gemini_vision' ? 'Gemini Vision' :
+                                         settings.translationProvider === 'googlecloud' ? 'Google Cloud' : 'Google Translate'}
                                     </span>
                                 </div>
                                 <div style={{ marginLeft: '22px', marginBottom: '6px' }}>
-                                    {settings.translationProvider === 'googlecloud' && (
+                                    {settings.ocrProvider === 'gemini_vision' && (
+                                        <div style={{ color: settings.geminiApiKey ? '#666' : '#ff6b6b', fontSize: '10px' }}>
+                                            {settings.geminiApiKey ? 'API key configured' : 'API key required'}
+                                        </div>
+                                    )}
+                                    {settings.ocrProvider !== 'gemini_vision' && settings.translationProvider === 'googlecloud' && (
                                         <div style={{ color: settings.googleApiKey ? '#666' : '#ff6b6b', fontSize: '10px' }}>
                                             {settings.googleApiKey ? 'API key configured' : 'API key required'}
                                         </div>

@@ -16,8 +16,9 @@ import {
 } from "@decky/ui";
 
 import { VFC, useState, useEffect } from "react";
+import { call } from "@decky/api";
 import { useSettings } from "../SettingsContext";
-import { HiKey } from "react-icons/hi2";
+import { HiKey, HiArrowPath } from "react-icons/hi2";
 
 // @ts-ignore
 import ocrspaceLogo from "../../assets/ocrspace-logo.png";
@@ -27,6 +28,8 @@ import googlecloudLogo from "../../assets/googlecloud-logo.png";
 import googletranslateLogo from "../../assets/googletranslate-logo.png";
 // @ts-ignore
 import rapidocrLogo from "../../assets/rapidocr-logo.png";
+// @ts-ignore
+import geminiLogo from "../../assets/gemini-logo.png";
 
 // Language options with flag emojis
 const languageOptions = [
@@ -71,15 +74,17 @@ const ApiKeyModal: VFC<{
     currentKey: string;
     onSave: (key: string) => void;
     closeModal?: () => void;
-}> = ({ currentKey, onSave, closeModal }) => {
+    title?: string;
+    description?: string;
+}> = ({ currentKey, onSave, closeModal, title, description }) => {
     const [apiKey, setApiKey] = useState(currentKey || "");
 
     return (
         <ModalRoot onCancel={closeModal} onEscKeypress={closeModal}>
             <div style={{ padding: "20px", minWidth: "400px" }}>
-                <h2 style={{ marginBottom: "15px" }}>Google Cloud API Key</h2>
+                <h2 style={{ marginBottom: "15px" }}>{title || "API Key"}</h2>
                 <p style={{ marginBottom: "15px", color: "#aaa", fontSize: "13px" }}>
-                    Enter your Google Cloud API key for Vision and Translation services.
+                    {description || "Enter your API key."}
                 </p>
                 <TextField
                     label="API Key"
@@ -105,6 +110,83 @@ const ApiKeyModal: VFC<{
                 </Focusable>
             </div>
         </ModalRoot>
+    );
+};
+
+const knownGeminiModels: DropdownItem[] = [
+    { label: <span>2.5 Flash</span>, data: "gemini-2.5-flash" },
+    { label: <span>2.5 Flash Lite</span>, data: "gemini-2.5-flash-lite" },
+    { label: <span>3 Flash (Preview)</span>, data: "gemini-3-flash-preview" },
+    { label: <span>3 Flash</span>, data: "gemini-3-flash" },
+    { label: <span>3.1 Flash Lite (Preview)</span>, data: "gemini-3.1-flash-lite-preview" },
+    { label: <span>3.1 Flash Lite</span>, data: "gemini-3.1-flash-lite" },
+];
+
+const GeminiModelSelector: VFC<{
+    selectedModel: string;
+    hasApiKey: boolean;
+    onChange: (model: string) => void;
+}> = ({ selectedModel, hasApiKey, onChange }) => {
+    const [models, setModels] = useState<DropdownItem[]>(knownGeminiModels);
+    const [loading, setLoading] = useState(false);
+    const [validated, setValidated] = useState(false);
+
+    const validateModels = async () => {
+        if (!hasApiKey) return;
+        setLoading(true);
+        try {
+            const available = await call<string[]>('get_gemini_models');
+            if (available && available.length > 0) {
+                const availableSet = new Set(available);
+                const filtered = knownGeminiModels.filter(m => availableSet.has(m.data));
+                if (filtered.length > 0) {
+                    setModels(filtered);
+                    // If current selection was removed, switch to first available
+                    if (!availableSet.has(selectedModel) && filtered.length > 0) {
+                        onChange(filtered[0].data);
+                    }
+                }
+            }
+            setValidated(true);
+        } catch (e) {
+            // keep full list on error
+        }
+        setLoading(false);
+    };
+
+    // Validate when component mounts (user selected Gemini Vision)
+    useEffect(() => {
+        if (hasApiKey && !validated) {
+            validateModels();
+        }
+    }, [hasApiKey]);
+
+    return (
+        <>
+            <style>{`@keyframes gemini-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+            <PanelSectionRow>
+                <Field
+                    label="Gemini Model"
+                    childrenContainerWidth="fixed"
+                    focusable={false}
+                >
+                    <Focusable style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                        <Dropdown
+                            rgOptions={models}
+                            selectedOption={selectedModel}
+                            onChange={(option) => onChange(option.data)}
+                        />
+                        <DialogButton
+                            onClick={validateModels}
+                            disabled={loading || !hasApiKey}
+                            style={{ minWidth: "40px", width: "40px", padding: "10px 0" }}
+                        >
+                            <HiArrowPath style={loading ? { animation: "gemini-spin 1s linear infinite" } : {}} />
+                        </DialogButton>
+                    </Focusable>
+                </Field>
+            </PanelSectionRow>
+        </>
     );
 };
 
@@ -163,7 +245,8 @@ export const TabTranslation: VFC = () => {
                                 rgOptions={[
                                     { label: <span>RapidOCR</span>, data: "rapidocr" },
                                     { label: <span>OCR.space</span>, data: "ocrspace" },
-                                    { label: <span>Google Cloud</span>, data: "googlecloud" }
+                                    { label: <span>Google Cloud</span>, data: "googlecloud" },
+                                    { label: <span>Gemini Vision</span>, data: "gemini_vision" }
                                 ]}
                                 selectedOption={settings.ocrProvider}
                                 onChange={(option) => {
@@ -180,6 +263,8 @@ export const TabTranslation: VFC = () => {
                                             <ApiKeyModal
                                                 currentKey={settings.googleApiKey}
                                                 onSave={(key) => updateSetting('googleApiKey', key, 'Google API Key')}
+                                                title="Google Cloud API Key"
+                                                description="Enter your Google Cloud API key for Vision and Translation services."
                                             />
                                         );
                                     }}
@@ -199,9 +284,44 @@ export const TabTranslation: VFC = () => {
                                     </div>
                                 </DialogButton>
                             )}
+                            {settings.ocrProvider === 'gemini_vision' && (
+                                <DialogButton
+                                    onClick={() => {
+                                        showModal(
+                                            <ApiKeyModal
+                                                currentKey={settings.geminiApiKey}
+                                                onSave={(key) => updateSetting('geminiApiKey', key, 'Gemini API Key')}
+                                                title="Gemini API Key"
+                                                description="Enter your free Gemini API key from aistudio.google.com."
+                                            />
+                                        );
+                                    }}
+                                    style={{ minWidth: "40px", width: "40px", padding: "10px 0" }}
+                                >
+                                    <div style={{ position: "relative", display: "inline-flex" }}>
+                                        <HiKey />
+                                        <div style={{
+                                            position: "absolute",
+                                            bottom: "-8px",
+                                            right: "-6px",
+                                            width: "6px",
+                                            height: "6px",
+                                            borderRadius: "50%",
+                                            backgroundColor: settings.geminiApiKey ? "#4caf50" : "#ff6b6b"
+                                        }} />
+                                    </div>
+                                </DialogButton>
+                            )}
                         </Focusable>
                     </Field>
                 </PanelSectionRow>
+                {settings.ocrProvider === 'gemini_vision' && (
+                    <GeminiModelSelector
+                        selectedModel={settings.geminiModel}
+                        hasApiKey={!!settings.geminiApiKey}
+                        onChange={(model) => updateSetting('geminiModel', model, 'Gemini model')}
+                    />
+                )}
                 <PanelSectionRow>
                     <Field
                         focusable={true}
@@ -245,11 +365,25 @@ export const TabTranslation: VFC = () => {
                                     )}
                                 </>
                             )}
+                            {settings.ocrProvider === 'gemini_vision' && (
+                                <>
+                                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                                        <img src={geminiLogo} alt="" style={{ height: "18px" }} />
+                                        <span style={{ fontWeight: "bold", color: "#dcdedf" }}>Gemini Vision (Google AI)</span>
+                                    </div>
+                                    <div>- AI-based Recognition and Translation</div>
+                                    <div>- Great accuracy, context-aware translations</div>
+                                    <div>- Free API key available at aistudio.google.com</div>
+                                    {!settings.geminiApiKey && (
+                                        <div style={{ color: "#ff6b6b", marginTop: "4px" }}>You need to add your Gemini API Key</div>
+                                    )}
+                                </>
+                            )}
                         </div>
                     </Field>
                 </PanelSectionRow>
 
-                {settings.ocrProvider !== 'ocrspace' && (
+                {settings.ocrProvider !== 'ocrspace' && settings.ocrProvider !== 'gemini_vision' && (
                     <PanelSectionRow>
                         <ToggleField
                             label="Customize Recognition"
@@ -342,6 +476,16 @@ export const TabTranslation: VFC = () => {
                         childrenContainerWidth="fixed"
                         focusable={false}
                     >
+                        {settings.ocrProvider === 'gemini_vision' ? (
+                            <Dropdown
+                                rgOptions={[
+                                    { label: <span>Gemini Vision</span>, data: "gemini_vision" }
+                                ]}
+                                selectedOption="gemini_vision"
+                                disabled={true}
+                                onChange={() => {}}
+                            />
+                        ) : (
                         <Focusable style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                             <Dropdown
                                 rgOptions={[
@@ -358,6 +502,8 @@ export const TabTranslation: VFC = () => {
                                             <ApiKeyModal
                                                 currentKey={settings.googleApiKey}
                                                 onSave={(key) => updateSetting('googleApiKey', key, 'Google API Key')}
+                                                title="Google Cloud API Key"
+                                                description="Enter your Google Cloud API key for Translation services."
                                             />
                                         );
                                     }}
@@ -378,6 +524,7 @@ export const TabTranslation: VFC = () => {
                                 </DialogButton>
                             )}
                         </Focusable>
+                        )}
                     </Field>
                 </PanelSectionRow>
                 <PanelSectionRow>
@@ -386,7 +533,17 @@ export const TabTranslation: VFC = () => {
                         childrenContainerWidth="max"
                     >
                         <div style={{ color: "#8b929a", fontSize: "12px", lineHeight: "1.6" }}>
-                            {settings.translationProvider === 'freegoogle' && (
+                            {settings.ocrProvider === 'gemini_vision' && (
+                                <>
+                                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                                        <img src={geminiLogo} alt="" style={{ height: "18px" }} />
+                                        <span style={{ fontWeight: "bold", color: "#dcdedf" }}>Gemini Vision</span>
+                                    </div>
+                                    <div>- Translation is handled by Gemini Vision</div>
+                                    <div>- OCR and translation happen in a single step</div>
+                                </>
+                            )}
+                            {settings.ocrProvider !== 'gemini_vision' && settings.translationProvider === 'freegoogle' && (
                                 <>
                                     <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
                                         <img src={googletranslateLogo} alt="" style={{ height: "18px" }} />
@@ -396,7 +553,7 @@ export const TabTranslation: VFC = () => {
                                     <div>- Good quality for most languages</div>
                                 </>
                             )}
-                            {settings.translationProvider === 'googlecloud' && (
+                            {settings.ocrProvider !== 'gemini_vision' && settings.translationProvider === 'googlecloud' && (
                                 <>
                                     <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
                                         <img src={googlecloudLogo} alt="" style={{ height: "18px" }} />
