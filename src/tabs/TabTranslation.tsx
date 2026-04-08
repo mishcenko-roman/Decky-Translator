@@ -19,7 +19,8 @@ import {
 import { VFC, useState, useEffect, useRef, useCallback } from "react";
 import { call } from "@decky/api";
 import { useSettings } from "../SettingsContext";
-import { HiKey, HiArrowPath } from "react-icons/hi2";
+import { HiKey } from "react-icons/hi2";
+import { BsArrowRepeat } from "react-icons/bs";
 
 // @ts-ignore
 import ocrspaceLogo from "../../assets/ocrspace-logo.png";
@@ -27,8 +28,6 @@ import ocrspaceLogo from "../../assets/ocrspace-logo.png";
 import googlecloudLogo from "../../assets/googlecloud-logo.png";
 // @ts-ignore
 import googletranslateLogo from "../../assets/googletranslate-logo.png";
-// @ts-ignore
-import rapidocrLogo from "../../assets/rapidocr-logo.png";
 // @ts-ignore
 import geminiLogo from "../../assets/gemini-logo.png";
 // @ts-ignore
@@ -190,7 +189,7 @@ const GeminiModelSelector: VFC<{
                             disabled={loading || !hasApiKey}
                             style={{ minWidth: "40px", width: "40px", padding: "10px 0" }}
                         >
-                            <HiArrowPath style={loading ? { animation: "gemini-spin 1s linear infinite" } : {}} />
+                            <BsArrowRepeat style={loading ? { animation: "gemini-spin 1s linear infinite" } : {}} />
                         </DialogButton>
                     </Focusable>
                 </Field>
@@ -441,7 +440,7 @@ export const TabTranslation: VFC = () => {
                         <Focusable style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                             <Dropdown
                                 rgOptions={[
-                                    { label: <span>RapidOCR</span>, data: "rapidocr" },
+                                    { label: <span>On-Device</span>, data: "rapidocr" },
                                     { label: <span>OCR.space</span>, data: "ocrspace" },
                                     { label: <span>Google Cloud</span>, data: "googlecloud" },
                                     { label: <span>Gemini Vision</span>, data: "gemini_vision" }
@@ -533,9 +532,10 @@ export const TabTranslation: VFC = () => {
                                         <span style={{ fontWeight: "bold", color: "#dcdedf" }}>On-Device (RapidOCR)</span>
                                     </div>
                                     <ProviderRating quality={1} speed={1} />
-                                    <div>- On-Device Text Recognition</div>
+                                    <div>- Offline recognition, no internet required</div>
                                     <div>- Customizable parameters</div>
                                     <div>- Screenshots do not leave your device</div>
+                                    <div>- Experimental support</div>
                                 </>
                             )}
                             {settings.ocrProvider === 'ocrspace' && (
@@ -689,9 +689,9 @@ export const TabTranslation: VFC = () => {
                         <Focusable style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                             <Dropdown
                                 rgOptions={[
+                                    { label: <span>On-Device</span>, data: "ct2" },
                                     { label: <span>Google Translate</span>, data: "freegoogle" },
-                                    { label: <span>Google Cloud</span>, data: "googlecloud" },
-                                    { label: <span>Offline (NLLB)</span>, data: "ct2" }
+                                    { label: <span>Google Cloud</span>, data: "googlecloud" }
                                 ]}
                                 selectedOption={settings.translationProvider}
                                 onChange={(option) => updateSetting('translationProvider', option.data, 'Translation provider')}
@@ -777,9 +777,11 @@ export const TabTranslation: VFC = () => {
                                         <span style={{ fontWeight: "bold", color: "#dcdedf" }}>On-Device (NLLB)</span>
                                     </div>
                                     <ProviderRating quality={1} speed={1} />
-                                    <div>- On-device translation, no internet needed</div>
-                                    <div>- Single ~650 MB model download covers all languages</div>
-                                    <div>- Auto-detect not supported, pick a source language</div>
+                                    <div>- Offline translation, no internet needed</div>
+                                    <div>- One-time ~600 MB download required</div>
+                                    <div>- Single model covers most languages</div>
+                                    <div>- Auto-detect not supported, need to specify source language</div>
+                                    <div>- Experimental support</div>
                                 </>
                             )}
                         </div>
