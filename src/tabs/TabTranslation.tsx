@@ -19,7 +19,7 @@ import {
 import { VFC, useState, useEffect, useRef, useCallback } from "react";
 import { call } from "@decky/api";
 import { useSettings } from "../SettingsContext";
-import { HiKey } from "react-icons/hi2";
+import { HiKey, HiLockClosed } from "react-icons/hi2";
 import { BsArrowRepeat } from "react-icons/bs";
 
 // @ts-ignore
@@ -679,7 +679,7 @@ export const TabTranslation: VFC = () => {
                         {settings.ocrProvider === 'gemini_vision' ? (
                             <Dropdown
                                 rgOptions={[
-                                    { label: <span>Gemini Vision</span>, data: "gemini_vision" }
+                                    { label: <span style={{ display: "flex", alignItems: "center", gap: "6px" }}><HiLockClosed style={{ fontSize: "12px", color: "#888" }} /> Gemini Vision</span>, data: "gemini_vision" }
                                 ]}
                                 selectedOption="gemini_vision"
                                 disabled={true}
