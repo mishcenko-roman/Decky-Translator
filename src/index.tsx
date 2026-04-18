@@ -237,7 +237,7 @@ const HoldActivationIndicator: VFC<{ logic: GameTranslatorLogic }> = ({logic}) =
         if (!progressInfo.active) return "";
 
         const action = progressInfo.forDismiss ? "Dismiss" : "Translate";
-        const timeRequired = progressInfo.forDismiss ? "0.5s" : "1s";
+        const timeRequired = `${(progressInfo.forDismiss ? settings.holdTimeDismiss : settings.holdTimeTranslate) / 1000}s`;
 
         return `Hold to ${action} (${timeRequired})`;
     };
