@@ -13,6 +13,7 @@ from typing import List, Optional
 import requests
 
 from .base import OCRProvider, ProviderType, TextRegion, NetworkError, RateLimitError
+from . import python_runtime
 
 logger = logging.getLogger(__name__)
 
@@ -214,8 +215,8 @@ class OCRSpaceProvider(OCRProvider):
     def _compress_image(self, image_data: bytes) -> bytes:
         """
         Compress image to fit within OCR.space size limit (1MB).
-        Uses system Python 3.13 subprocess for PIL access, since the
-        Decky main process (Python 3.11) can't load cp313 C extensions.
+        Spawns a Python 3.13 subprocess for PIL access, since the Decky main
+        process runs Python 3.11 and can't load cp313 C extensions.
         """
         if len(image_data) <= MAX_FILE_SIZE:
             return image_data
@@ -223,9 +224,13 @@ class OCRSpaceProvider(OCRProvider):
         logger.debug(f"Image size {len(image_data)} bytes exceeds limit, compressing...")
 
         try:
-            python_path = self._find_system_python()
+            plugin_dir = os.environ.get("DECKY_PLUGIN_DIR", "")
+            python_path = python_runtime.find_python(plugin_dir)
             if not python_path:
-                logger.error("No system Python found for image compression")
+                logger.error(
+                    "Image compression unavailable: no Python 3.13 runtime found. "
+                    "Image will be sent uncompressed and likely rejected by OCR.space."
+                )
                 return image_data
 
             script = """
@@ -297,13 +302,6 @@ while True:
         except Exception as e:
             logger.error(f"Image compression failed: {e}")
             return image_data
-
-    @staticmethod
-    def _find_system_python() -> str:
-        for path in ['/usr/bin/python3', '/usr/bin/python3.13', '/usr/local/bin/python3']:
-            if os.path.exists(path) and os.access(path, os.X_OK):
-                return path
-        return ""
 
     async def recognize(self, image_data: bytes, language: str = "auto") -> List[TextRegion]:
         """

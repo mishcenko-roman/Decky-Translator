@@ -12,6 +12,7 @@ import time
 from typing import List, Optional
 
 from .base import OCRProvider, ProviderType, TextRegion
+from . import python_runtime
 
 logger = logging.getLogger(__name__)
 
@@ -123,21 +124,6 @@ class RapidOCRProvider(OCRProvider):
             f"(plugin_dir={self._plugin_dir}, min_confidence={min_confidence})"
         )
 
-    def _find_python_interpreter(self) -> Optional[str]:
-        """Find a suitable Python 3 interpreter for subprocess execution."""
-        candidates = [
-            '/usr/bin/python3',
-            '/usr/bin/python3.13',
-            '/usr/local/bin/python3',
-        ]
-
-        for path in candidates:
-            if os.path.exists(path) and os.access(path, os.X_OK):
-                logger.debug(f"Found system Python at: {path}")
-                return path
-
-        return None
-
     def _check_availability(self) -> bool:
         """Check if RapidOCR subprocess script and models are available."""
         self._init_error = None  # Clear any previous error
@@ -164,13 +150,16 @@ class RapidOCRProvider(OCRProvider):
             logger.warning(self._init_error)
             return False
 
-        # Find system Python 3 interpreter
+        # Find Python 3.13 interpreter (bundled, then system fallback)
         # Note: sys.executable points to PluginLoader, not a Python interpreter!
         # We must NOT use sys.executable as it would spawn another Decky instance
-        self._python_path = self._find_python_interpreter()
+        self._python_path = python_runtime.find_python(self._plugin_dir)
 
         if not self._python_path:
-            self._init_error = "Python 3 not found on the system"
+            self._init_error = (
+                "Python 3.13 runtime missing. Reinstall the plugin to restore "
+                "the bundled runtime, or install python3.13 on your system."
+            )
             logger.warning(self._init_error)
             return False
 

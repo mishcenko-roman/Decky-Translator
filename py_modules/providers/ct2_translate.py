@@ -10,6 +10,7 @@ from typing import List, Optional
 
 from .base import TranslationProvider, ProviderType
 from .model_manager import NLLB_LANG_MAP, ModelManager
+from . import python_runtime
 
 logger = logging.getLogger(__name__)
 
@@ -52,17 +53,8 @@ class CT2TranslateProvider(TranslationProvider):
     def _find_python_interpreter(self) -> Optional[str]:
         if self._python_path:
             return self._python_path
-
-        candidates = [
-            '/usr/bin/python3',
-            '/usr/bin/python3.13',
-            '/usr/local/bin/python3',
-        ]
-        for path in candidates:
-            if os.path.exists(path) and os.access(path, os.X_OK):
-                self._python_path = path
-                return path
-        return None
+        self._python_path = python_runtime.find_python(self._plugin_dir)
+        return self._python_path
 
     def _ensure_worker(self) -> bool:
         with self._worker_lock:

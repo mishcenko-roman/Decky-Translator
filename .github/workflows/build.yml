@@ -89,6 +89,14 @@ jobs:
           rm -rf numpy/_pyinstaller onnxruntime/datasets
           echo "py_modules size after cleanup: $(du -sh . | cut -f1)"
 
+      - name: Download Python 3.13 portable runtime
+        run: |
+          mkdir -p dependencies_build/python313
+          curl -L -o dependencies_build/python313/python-3.13.tar.gz \
+            "https://github.com/astral-sh/python-build-standalone/releases/download/20260408/cpython-3.13.13%2B20260408-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz"
+          echo "a1dbc39f9c7b7d4ff3074fa18de66714c4e4400643bd657894a65803b0362a92  dependencies_build/python313/python-3.13.tar.gz" | sha256sum -c
+          cd dependencies_build/python313 && tar -xzf python-3.13.tar.gz && rm python-3.13.tar.gz
+
       - name: Download RapidOCR models
         run: |
           mkdir -p dependencies_build/rapidocr/models
@@ -120,7 +128,7 @@ jobs:
       - name: Create dependencies archive
         run: |
           cd dependencies_build
-          tar -czvf ../plugin-dependencies.tar.gz py_modules rapidocr
+          tar -czvf ../plugin-dependencies.tar.gz py_modules python313 rapidocr
 
       - name: Calculate dependencies SHA256
         id: dependencies_hash
