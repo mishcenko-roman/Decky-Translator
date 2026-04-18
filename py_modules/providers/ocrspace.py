@@ -57,6 +57,7 @@ class OCRSpaceProvider(OCRProvider):
         'vi': 'vie',
         'ro': 'rum',
         'bg': 'bul',
+        'hr': 'hrv',
     }
 
     # Languages that benefit from Engine 2 (Asian languages)

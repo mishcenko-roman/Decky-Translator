@@ -38,7 +38,7 @@ LANG_NAMES = {
     "bg": "Bulgarian", "ar": "Arabic", "hi": "Hindi",
     "id": "Indonesian", "ms": "Malay", "sv": "Swedish",
     "da": "Danish", "no": "Norwegian", "cs": "Czech",
-    "hu": "Hungarian", "he": "Hebrew",
+    "hu": "Hungarian", "he": "Hebrew", "hr": "Croatian",
 }
 
 

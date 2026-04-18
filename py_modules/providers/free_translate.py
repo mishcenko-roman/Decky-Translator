@@ -44,6 +44,7 @@ class FreeTranslateProvider(TranslationProvider):
         'id': 'id',
         'ro': 'ro',
         'bg': 'bg',
+        'hr': 'hr',
     }
 
     SUPPORTED_LANGUAGES = list(LANGUAGE_MAP.keys())
