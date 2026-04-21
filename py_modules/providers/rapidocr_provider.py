@@ -8,6 +8,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from typing import List, Optional
 
@@ -26,17 +27,29 @@ RAPIDOCR_MODELS_DIR = "bin/rapidocr/models"
 # OCR timeout in seconds (Steam Deck CPU can be slow)
 OCR_TIMEOUT_SECONDS = 120
 
-# Maximum image dimension for OCR (resize larger images for performance)
-MAX_IMAGE_DIMENSION = 1920
+# Stripped from the worker's env so ONNX can use multiple threads. The
+# oneshot path needs to cap threads to avoid deadlocks in the asyncio loop;
+# the worker runs in its own process with no event loop, so it's fine.
+_WORKER_ENV_STRIP = (
+    "OMP_NUM_THREADS",
+    "MKL_NUM_THREADS",
+    "OPENBLAS_NUM_THREADS",
+    "VECLIB_MAXIMUM_THREADS",
+    "NUMEXPR_NUM_THREADS",
+)
+
+_WORKER_THREADS = 4
 
 
 class RapidOCRProvider(OCRProvider):
     """
     OCR provider using RapidOCR (PaddleOCR via ONNX Runtime).
 
-    This provider runs ONNX-based OCR locally on the Steam Deck,
-    providing unlimited OCR without internet connectivity or rate limits.
-    Uses PP-OCRv5 models with per-language-family recognition.
+    Runs on-device. Has two execution paths:
+      - oneshot: spawn a short-lived subprocess per call (default)
+      - persistent worker: keep a long-lived worker subprocess alive between
+        calls. Opt-in via set_persistent_mode(True). Eliminates the
+        per-request Python startup + model-load cost.
     """
 
     # Language code mapping: plugin codes -> model family identifiers
@@ -98,6 +111,10 @@ class RapidOCRProvider(OCRProvider):
         self._init_error = None  # Store any initialization error
         self._python_path = None  # Path to system Python 3 interpreter
 
+        self._persistent_mode = False
+        self._worker_proc: Optional[subprocess.Popen] = None
+        self._worker_lock = threading.Lock()
+
         # Path to subprocess script
         # Check bin/py_modules first (Decky Store install via remote_binary)
         # Then fall back to root py_modules (dev/manual install)
@@ -138,15 +155,7 @@ class RapidOCRProvider(OCRProvider):
         # Check for bundled models (det + cls are shared across all languages)
         det_model = os.path.join(self._models_dir, "ch_PP-OCRv5_mobile_det.onnx")
         cls_model = os.path.join(self._models_dir, "ch_ppocr_mobile_v2.0_cls_infer.onnx")
-
-        models_exist = all([
-            os.path.exists(det_model),
-            os.path.exists(cls_model)
-        ])
-
-        if models_exist:
-            logger.debug(f"RapidOCR models found at {self._models_dir}")
-        else:
+        if not (os.path.exists(det_model) and os.path.exists(cls_model)):
             self._init_error = "RapidOCR models not found"
             logger.warning(self._init_error)
             return False
@@ -155,7 +164,6 @@ class RapidOCRProvider(OCRProvider):
         # Note: sys.executable points to PluginLoader, not a Python interpreter!
         # We must NOT use sys.executable as it would spawn another Decky instance
         self._python_path = python_runtime.find_python(self._plugin_dir)
-
         if not self._python_path:
             self._init_error = (
                 "Python 3.13 runtime missing. Reinstall the plugin to restore "
@@ -165,7 +173,6 @@ class RapidOCRProvider(OCRProvider):
             return False
 
         logger.debug(f"RapidOCR: Using Python interpreter: {self._python_path}")
-        logger.debug("RapidOCR subprocess mode ready")
         return True
 
     @property
@@ -189,10 +196,8 @@ class RapidOCRProvider(OCRProvider):
         # Lazy availability check
         if self._available is None:
             self._available = self._check_availability()
-
         if not self._available:
             return False
-
         # Check if language is in our supported list
         return language in self.SUPPORTED_LANGUAGES
 
@@ -209,8 +214,12 @@ class RapidOCRProvider(OCRProvider):
                         Lower values = more results but more noise.
                         Higher values = fewer results but more accurate.
         """
-        self._min_confidence = max(0.0, min(1.0, confidence))
-        logger.debug(f"RapidOCRProvider min_confidence set to {self._min_confidence}")
+        value = max(0.0, min(1.0, confidence))
+        if value == self._min_confidence:
+            return
+        self._min_confidence = value
+        logger.debug(f"RapidOCRProvider min_confidence set to {value}")
+        self._restart_worker_if_running()
 
     def set_box_thresh(self, box_thresh: float) -> None:
         """
@@ -221,8 +230,12 @@ class RapidOCRProvider(OCRProvider):
                         Lower values = more text boxes detected.
                         Higher values = fewer but more confident boxes.
         """
-        self._box_thresh = max(0.0, min(1.0, box_thresh))
-        logger.debug(f"RapidOCRProvider box_thresh set to {self._box_thresh}")
+        value = max(0.0, min(1.0, box_thresh))
+        if value == self._box_thresh:
+            return
+        self._box_thresh = value
+        logger.debug(f"RapidOCRProvider box_thresh set to {value}")
+        self._restart_worker_if_running()
 
     def set_unclip_ratio(self, unclip_ratio: float) -> None:
         """
@@ -232,8 +245,28 @@ class RapidOCRProvider(OCRProvider):
             unclip_ratio: Ratio for expanding detected boxes (1.0-3.0).
                           Higher values = larger text regions.
         """
-        self._unclip_ratio = max(1.0, min(3.0, unclip_ratio))
-        logger.debug(f"RapidOCRProvider unclip_ratio set to {self._unclip_ratio}")
+        value = max(1.0, min(3.0, unclip_ratio))
+        if value == self._unclip_ratio:
+            return
+        self._unclip_ratio = value
+        logger.debug(f"RapidOCRProvider unclip_ratio set to {value}")
+        self._restart_worker_if_running()
+
+    def set_persistent_mode(self, enabled: bool) -> None:
+        enabled = bool(enabled)
+        if enabled == self._persistent_mode:
+            return
+        self._persistent_mode = enabled
+        logger.info(f"RapidOCR persistent mode: {enabled}")
+        if enabled:
+            # Warm up off the caller's thread so the first translate is fast.
+            threading.Thread(target=self._warmup_worker, daemon=True).start()
+        else:
+            self.stop_worker()
+
+    def _warmup_worker(self) -> None:
+        if self._persistent_mode:
+            self.start_worker()
 
     def get_init_error(self) -> Optional[str]:
         """Return any initialization error message."""
@@ -253,13 +286,14 @@ class RapidOCRProvider(OCRProvider):
             "bundled_models": False,
             "min_confidence": self._min_confidence,
             "error": self._init_error,
-            "mode": "subprocess"
+            "mode": "subprocess",
+            "persistent_mode": self._persistent_mode,
+            "worker_alive": self._is_worker_alive(),
         }
 
         # Check availability
         if self._available is None:
             self._available = self._check_availability()
-
         info["available"] = self._available
 
         # Get RapidOCR version from package metadata (no import needed)
@@ -292,54 +326,263 @@ class RapidOCRProvider(OCRProvider):
         if os.path.exists(self._models_dir):
             det_model = os.path.join(self._models_dir, "ch_PP-OCRv5_mobile_det.onnx")
             info["bundled_models"] = os.path.exists(det_model)
-
         return info
 
+    def _is_worker_alive(self) -> bool:
+        proc = self._worker_proc
+        return proc is not None and proc.poll() is None
+
+    def _start_stderr_drainer(self, proc: subprocess.Popen) -> None:
+        def drain():
+            try:
+                stream = proc.stderr
+                if stream is None:
+                    return
+                for raw in iter(stream.readline, b''):
+                    if not raw:
+                        break
+                    try:
+                        line = raw.decode('utf-8', errors='replace').rstrip()
+                    except Exception:
+                        continue
+                    if line:
+                        logger.warning(f"RapidOCR worker stderr: {line}")
+            except Exception:
+                pass
+
+        t = threading.Thread(target=drain, daemon=True)
+        t.start()
+
+    def _build_worker_env(self) -> dict:
+        env = os.environ.copy()
+        env['PYTHONPATH'] = self._py_modules_dir
+        env['PYTHONNOUSERSITE'] = '1'
+        env['PYTHONDONTWRITEBYTECODE'] = '1'
+        for k in _WORKER_ENV_STRIP:
+            env.pop(k, None)
+        return env
+
+    def start_worker(self) -> bool:
+        """Start the worker subprocess and wait for ready"""
+        with self._worker_lock:
+            if not self._persistent_mode:
+                return False
+            if self._worker_proc is not None and self._worker_proc.poll() is None:
+                return True
+
+            if self._available is None:
+                self._available = self._check_availability()
+            if not self._available or not self._python_path:
+                logger.warning("Cannot start RapidOCR worker: provider not available")
+                return False
+
+            env = self._build_worker_env()
+            try:
+                self._worker_proc = subprocess.Popen(
+                    [self._python_path, '-S', self._subprocess_script, '--worker'],
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    env=env,
+                )
+            except Exception as e:
+                logger.error(f"Failed to spawn RapidOCR worker: {e}")
+                self._worker_proc = None
+                return False
+
+            # Without this the ~64 KB stderr pipe eventually fills up from
+            # ONNX warnings and the worker blocks, deadlocking our stdout read.
+            self._start_stderr_drainer(self._worker_proc)
+
+            init_msg = {
+                "type": "init",
+                "models_dir": self._models_dir,
+                "min_confidence": self._min_confidence,
+                "box_thresh": self._box_thresh,
+                "unclip_ratio": self._unclip_ratio,
+                "lang_family": "ch",
+                "threads": _WORKER_THREADS,
+            }
+            start = time.time()
+            try:
+                self._worker_proc.stdin.write((json.dumps(init_msg) + "\n").encode())
+                self._worker_proc.stdin.flush()
+                ready_line = self._worker_proc.stdout.readline()
+                if not ready_line:
+                    logger.error("RapidOCR worker died before ready response")
+                    self._kill_worker_unlocked()
+                    return False
+                ready = json.loads(ready_line.decode().strip())
+                if ready.get("error"):
+                    logger.error(f"RapidOCR worker init error: {ready['error']}")
+                    self._kill_worker_unlocked()
+                    return False
+            except Exception as e:
+                logger.error(f"RapidOCR worker init failed: {e}")
+                self._kill_worker_unlocked()
+                return False
+
+            elapsed = time.time() - start
+            logger.info(f"RapidOCR worker ready ({elapsed:.2f}s)")
+            return True
+
+    def stop_worker(self) -> None:
+        with self._worker_lock:
+            self._kill_worker_unlocked()
+
+    def _kill_worker_unlocked(self) -> None:
+        proc = self._worker_proc
+        self._worker_proc = None
+        if proc is None:
+            return
+        try:
+            if proc.poll() is None:
+                try:
+                    proc.stdin.write(b'{"type":"shutdown"}\n')
+                    proc.stdin.flush()
+                except Exception:
+                    pass
+                try:
+                    proc.stdin.close()
+                except Exception:
+                    pass
+                try:
+                    proc.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    proc.terminate()
+                    try:
+                        proc.wait(timeout=1)
+                    except subprocess.TimeoutExpired:
+                        proc.kill()
+                        try:
+                            proc.wait(timeout=1)
+                        except subprocess.TimeoutExpired:
+                            pass
+        except Exception as e:
+            logger.warning(f"Error stopping RapidOCR worker: {e}")
+        for f in (proc.stdin, proc.stdout, proc.stderr):
+            try:
+                if f:
+                    f.close()
+            except Exception:
+                pass
+        logger.debug("RapidOCR worker stopped")
+
+    def _restart_worker_if_running(self) -> None:
+        if not self._persistent_mode:
+            return
+        if not self._is_worker_alive():
+            return
+        logger.debug("RapidOCR settings changed, restarting worker")
+        self.stop_worker()
+        threading.Thread(target=self._warmup_worker, daemon=True).start()
+
     async def recognize(self, image_data: bytes, language: str = "auto") -> List[TextRegion]:
-        """
-        Perform OCR using RapidOCR subprocess.
-
-        Args:
-            image_data: Raw image bytes (PNG/JPEG)
-            language: Language code for recognition
-
-        Returns:
-            List of TextRegion objects with detected text and positions
-        """
         # Ensure availability is checked
         if self._available is None:
             self._available = self._check_availability()
-
         if not self._available:
             logger.error("RapidOCR is not available")
             return []
 
+        if self._persistent_mode:
+            result = self._recognize_via_worker(image_data, language)
+            if result is not None:
+                return result
+            logger.warning("RapidOCR worker unavailable, falling back to oneshot")
+
+        return self._recognize_oneshot(image_data, language)
+
+    def _recognize_via_worker(self, image_data: bytes, language: str) -> Optional[List[TextRegion]]:
+        if not self._is_worker_alive():
+            if not self.start_worker():
+                return None
+
+        temp_path = os.path.join(
+            tempfile.gettempdir(),
+            f"rapidocr_input_{os.getpid()}.png"
+        )
+        try:
+            with open(temp_path, 'wb') as f:
+                f.write(image_data)
+
+            lang_family = self.LANGUAGE_MAP.get(language, 'ch')
+            request = {
+                "type": "recognize",
+                "image_path": temp_path,
+                "lang_family": lang_family,
+            }
+
+            start = time.time()
+            with self._worker_lock:
+                if self._worker_proc is None or self._worker_proc.poll() is not None:
+                    logger.warning("RapidOCR worker not running during request")
+                    return None
+                try:
+                    self._worker_proc.stdin.write((json.dumps(request) + "\n").encode())
+                    self._worker_proc.stdin.flush()
+                    response_line = self._worker_proc.stdout.readline()
+                except Exception as e:
+                    logger.error(f"RapidOCR worker I/O error: {e}")
+                    self._kill_worker_unlocked()
+                    return None
+
+                if not response_line:
+                    logger.error("RapidOCR worker: empty response (died)")
+                    self._kill_worker_unlocked()
+                    return None
+
+                try:
+                    response = json.loads(response_line.decode().strip())
+                except json.JSONDecodeError as e:
+                    logger.error(f"RapidOCR worker: bad JSON response: {e}")
+                    return None
+
+            elapsed = time.time() - start
+            if response.get("error"):
+                logger.error(f"RapidOCR worker error: {response['error']}")
+                return []
+
+            text_regions = []
+            for region in response.get("regions", []):
+                text_regions.append(TextRegion(
+                    text=region["text"],
+                    rect=region["rect"],
+                    confidence=region["confidence"],
+                    is_dialog=region.get("is_dialog", False),
+                ))
+            logger.debug(f"RapidOCR (worker): {len(text_regions)} regions in {elapsed:.2f}s")
+            return text_regions
+        finally:
+            try:
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+            except Exception:
+                pass
+
+    def _recognize_oneshot(self, image_data: bytes, language: str) -> List[TextRegion]:
         temp_image_path = None
         try:
             start_time = time.time()
-            logger.debug("RapidOCR: Starting subprocess OCR...")
+            logger.debug("RapidOCR: Starting oneshot subprocess OCR...")
 
             # Save image to temp file
             temp_image_path = os.path.join(
                 tempfile.gettempdir(),
                 f"rapidocr_input_{os.getpid()}.png"
             )
-
             with open(temp_image_path, 'wb') as f:
                 f.write(image_data)
-            logger.debug(f"RapidOCR: Saved temp image to {temp_image_path}")
 
             # Build environment with py_modules as ONLY Python path
             # This ensures we use our bundled packages, not the standalone Python's
             env = os.environ.copy()
-
             # Use detected py_modules path (bin/py_modules for store, root for dev)
             env['PYTHONPATH'] = self._py_modules_dir
             # Disable user site-packages
             env['PYTHONNOUSERSITE'] = '1'
             # Ensure isolated mode-like behavior
             env['PYTHONDONTWRITEBYTECODE'] = '1'
-
             # Set threading environment variables
             env['OMP_NUM_THREADS'] = '1'
             env['MKL_NUM_THREADS'] = '1'
@@ -370,7 +613,7 @@ class RapidOCRProvider(OCRProvider):
                 capture_output=True,
                 text=True,
                 timeout=OCR_TIMEOUT_SECONDS,
-                env=env
+                env=env,
             )
 
             elapsed = time.time() - start_time
@@ -404,7 +647,7 @@ class RapidOCRProvider(OCRProvider):
                     text=region["text"],
                     rect=region["rect"],
                     confidence=region["confidence"],
-                    is_dialog=region.get("is_dialog", False)
+                    is_dialog=region.get("is_dialog", False),
                 ))
 
             logger.debug(f"RapidOCR: Found {len(text_regions)} text regions in {elapsed:.2f}s")

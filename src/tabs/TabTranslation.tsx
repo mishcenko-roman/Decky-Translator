@@ -584,6 +584,19 @@ export const TabTranslation: VFC = () => {
                     </Field>
                 </PanelSectionRow>
 
+                {settings.ocrProvider === 'rapidocr' && (
+                    <PanelSectionRow>
+                        <ToggleField
+                            label="Faster Recognition"
+                            description="Keeps the recognition engine loaded in memory between translations"
+                            checked={settings.rapidocrPersistentMode}
+                            onChange={(value) => {
+                                updateSetting('rapidocrPersistentMode', value, 'Faster recognition');
+                            }}
+                        />
+                    </PanelSectionRow>
+                )}
+
                 {settings.ocrProvider !== 'ocrspace' && settings.ocrProvider !== 'gemini_vision' && (
                     <PanelSectionRow>
                         <ToggleField

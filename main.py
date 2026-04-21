@@ -901,6 +901,7 @@ class Plugin:
     _rapidocr_confidence: float = 0.5  # RapidOCR-specific confidence threshold (0.0-1.0)
     _rapidocr_box_thresh: float = 0.5  # RapidOCR detection box threshold (0.0-1.0)
     _rapidocr_unclip_ratio: float = 1.6  # RapidOCR box expansion ratio (1.0-3.0)
+    _rapidocr_persistent_mode: bool = False  # Keep RapidOCR worker alive between requests
     _pause_game_on_overlay: bool = False  # Default to not pausing game on overlay
     _quick_toggle_enabled: bool = False  # Default to disabled for quick toggle
 
@@ -995,6 +996,16 @@ class Plugin:
                 self._rapidocr_unclip_ratio = value
                 if self._provider_manager:
                     self._provider_manager.set_rapidocr_unclip_ratio(value)
+            elif key == "rapidocr_persistent_mode":
+                self._rapidocr_persistent_mode = bool(value)
+                if self._provider_manager:
+                    plugin_enabled = self._settings.get_setting("enabled", True)
+                    self._provider_manager.set_rapidocr_persistent_mode(
+                        self._rapidocr_persistent_mode,
+                        apply_to_provider=plugin_enabled,
+                    )
+                    if not plugin_enabled and not self._rapidocr_persistent_mode:
+                        self._provider_manager.stop_rapidocr_worker()
             elif key == "pause_game_on_overlay":
                 self._pause_game_on_overlay = value
             elif key == "quick_toggle_enabled":
@@ -1041,6 +1052,13 @@ class Plugin:
                         ocr_provider=value,
                         translation_provider=self._translation_provider
                     )
+                    # Don't leave the RapidOCR worker running when the user
+                    # switches providers; resume it if they switch back.
+                    plugin_enabled = self._settings.get_setting("enabled", True)
+                    if value != "rapidocr":
+                        self._provider_manager.stop_rapidocr_worker()
+                    elif plugin_enabled:
+                        self._provider_manager.resume_rapidocr_worker()
             elif key == "translation_provider":
                 self._translation_provider = value
                 # Update provider manager configuration
@@ -1082,6 +1100,7 @@ class Plugin:
                 "rapidocr_confidence": self._settings.get_setting("rapidocr_confidence", 0.5),
                 "rapidocr_box_thresh": self._settings.get_setting("rapidocr_box_thresh", 0.5),
                 "rapidocr_unclip_ratio": self._settings.get_setting("rapidocr_unclip_ratio", 1.6),
+                "rapidocr_persistent_mode": self._settings.get_setting("rapidocr_persistent_mode", False),
                 "pause_game_on_overlay": self._settings.get_setting("pause_game_on_overlay", False),
                 "quick_toggle_enabled": self._settings.get_setting("quick_toggle_enabled", False),
                 "debug_mode": self._settings.get_setting("debug_mode", False),
@@ -1598,6 +1617,12 @@ class Plugin:
         return await self.get_setting("enabled", True)
 
     async def set_enabled_state(self, enabled):
+        if self._provider_manager:
+            if enabled:
+                if self._rapidocr_persistent_mode:
+                    self._provider_manager.resume_rapidocr_worker()
+            else:
+                self._provider_manager.stop_rapidocr_worker()
         return await self.set_setting("enabled", enabled)
 
     async def get_input_language(self):
@@ -1848,9 +1873,19 @@ class Plugin:
                 self._rapidocr_confidence = load_setting("rapidocr_confidence", self._rapidocr_confidence)
                 self._rapidocr_box_thresh = load_setting("rapidocr_box_thresh", self._rapidocr_box_thresh)
                 self._rapidocr_unclip_ratio = load_setting("rapidocr_unclip_ratio", self._rapidocr_unclip_ratio)
+            self._rapidocr_persistent_mode = bool(
+                load_setting("rapidocr_persistent_mode", self._rapidocr_persistent_mode)
+            )
             self._provider_manager.set_rapidocr_confidence(self._rapidocr_confidence)
             self._provider_manager.set_rapidocr_box_thresh(self._rapidocr_box_thresh)
             self._provider_manager.set_rapidocr_unclip_ratio(self._rapidocr_unclip_ratio)
+            # Only spin up the worker if the plugin is enabled right now;
+            # the preference is always stored so re-enable can pick it up.
+            plugin_enabled_at_boot = self._settings.get_setting("enabled", True)
+            self._provider_manager.set_rapidocr_persistent_mode(
+                self._rapidocr_persistent_mode,
+                apply_to_provider=plugin_enabled_at_boot,
+            )
 
             # Apply debug_mode log level
             if self._settings.get_setting("debug_mode", False):

@@ -65,6 +65,7 @@ class ProviderManager:
         self._rapidocr_confidence = 0.5  # Default RapidOCR confidence threshold (0.0-1.0)
         self._rapidocr_box_thresh = 0.5  # Default RapidOCR box detection threshold (0.0-1.0)
         self._rapidocr_unclip_ratio = 1.6  # Default RapidOCR box expansion ratio (1.0-3.0)
+        self._rapidocr_persistent_mode = False  # Keep worker alive between requests
 
         # CT2 translation
         self._ct2_models_dir = None
@@ -191,6 +192,41 @@ class ProviderManager:
             rapidocr.set_unclip_ratio(unclip_ratio)
         logger.debug(f"RapidOCR unclip_ratio set to {unclip_ratio}")
 
+    def set_rapidocr_persistent_mode(
+        self, enabled: bool, apply_to_provider: bool = True
+    ) -> None:
+        self._rapidocr_persistent_mode = bool(enabled)
+        if not apply_to_provider:
+            logger.debug(
+                f"RapidOCR persistent_mode preference: {self._rapidocr_persistent_mode} "
+                f"(not applied)"
+            )
+            return
+
+        if self._rapidocr_persistent_mode and self._ocr_provider_preference == "rapidocr":
+            rapidocr = self.get_ocr_provider(ProviderType.RAPIDOCR)
+        else:
+            rapidocr = self._ocr_providers.get(ProviderType.RAPIDOCR)
+        if rapidocr:
+            rapidocr.set_persistent_mode(self._rapidocr_persistent_mode)
+        logger.debug(
+            f"RapidOCR persistent_mode set to {self._rapidocr_persistent_mode}"
+        )
+
+    def stop_rapidocr_worker(self) -> None:
+        rapidocr = self._ocr_providers.get(ProviderType.RAPIDOCR)
+        if rapidocr:
+            rapidocr.stop_worker()
+
+    def resume_rapidocr_worker(self) -> None:
+        if not self._rapidocr_persistent_mode:
+            return
+        if self._ocr_provider_preference != "rapidocr":
+            return
+        rapidocr = self.get_ocr_provider(ProviderType.RAPIDOCR)
+        if rapidocr:
+            rapidocr.set_persistent_mode(True)
+
     def get_ocr_provider(
         self,
         provider_type: Optional[ProviderType] = None
@@ -217,9 +253,14 @@ class ProviderManager:
 
         if provider_type not in self._ocr_providers:
             if provider_type == ProviderType.RAPIDOCR:
-                self._ocr_providers[provider_type] = RapidOCRProvider(
+                provider = RapidOCRProvider(
                     min_confidence=self._rapidocr_confidence
                 )
+                provider.set_box_thresh(self._rapidocr_box_thresh)
+                provider.set_unclip_ratio(self._rapidocr_unclip_ratio)
+                if self._rapidocr_persistent_mode:
+                    provider.set_persistent_mode(True)
+                self._ocr_providers[provider_type] = provider
             elif provider_type == ProviderType.OCR_SPACE:
                 self._ocr_providers[provider_type] = OCRSpaceProvider()
             elif provider_type == ProviderType.GOOGLE:
@@ -408,7 +449,9 @@ class ProviderManager:
             self._model_manager.clear_download_error()
 
     def shutdown(self):
-        """Clean up CT2 translation worker subprocess."""
         ct2 = self._translation_providers.get(ProviderType.CT2)
         if ct2 and hasattr(ct2, 'shutdown'):
             ct2.shutdown()
+        rapidocr = self._ocr_providers.get(ProviderType.RAPIDOCR)
+        if rapidocr and hasattr(rapidocr, 'stop_worker'):
+            rapidocr.stop_worker()
