@@ -70,28 +70,25 @@ export class GameTranslatorLogic {
                 }
             } else {
                 // Translate action
-                if (!this.imageState.isVisible()) {
-                    this.takeScreenshotAndTranslate().catch(err => logger.error('Translator', 'Screenshot failed', err));
+                if (this.imageState.isVisible()) return;
+                if (this.isProcessing) return;
+                if (!this.canStartTranslation()) return;
+
+                // Pause first so the game freezes before the screenshot
+                if (this.pauseGameOnOverlay) {
+                    this.pauseCurrentGame().catch(err => logger.error('Translator', 'Pause failed', err));
                 }
+                this.takeScreenshotAndTranslate().catch(err => logger.error('Translator', 'Screenshot failed', err));
             }
         });
 
-        // Set up listener for overlay state changes to track visibility
         imageState.onStateChanged((visible, _, __, ___, ____, _____, ______, _______, ________) => {
             this.shortcutInput.setOverlayVisible(visible);
 
-            // Don't process game pause/resume if plugin is disabled
             if (!this.enabled) return;
 
-            // Handle game pausing/resuming when overlay visibility changes
-            if (this.pauseGameOnOverlay) {
-                if (visible) {
-                    // Overlay is showing, pause the game
-                    this.pauseCurrentGame();
-                } else {
-                    // Overlay is hidden, resume the game
-                    this.resumeCurrentGame();
-                }
+            if (this.pauseGameOnOverlay && !visible) {
+                this.resumeCurrentGame();
             }
         });
 
@@ -319,39 +316,7 @@ export class GameTranslatorLogic {
             return;
         }
 
-        // Check if languages are configured
-        const inputLang = this.getInputLanguage();
-        const targetLang = this.getTargetLanguage();
-        if (!inputLang && targetLang) {
-            logger.warn('Translator', 'Cannot start translation: languages not configured');
-            this.notify("Input language is not set", 3000, "Please select it in the plugin settings");
-            return;
-        }
-        if (!targetLang && inputLang) {
-            logger.warn('Translator', 'Cannot start translation: languages not configured');
-            this.notify("Output language is not set", 3000, "Please select it in the plugin settings");
-            return;
-        }
-        if (!inputLang && !targetLang) {
-            logger.warn('Translator', 'Cannot start translation: languages not configured');
-            this.notify("Output and Input languages are not set", 3000, "Please select them in the plugin settings");
-            return;
-        }
-
-        // Check if input and output languages are the same (auto-detect is fine)
-        if (inputLang !== 'auto' && inputLang === targetLang) {
-            logger.warn('Translator', `Cannot start translation: input and output language are both ${inputLang}`);
-            this.notify("Input and output languages can not be the same", 3000, "Select change them in plugin settings");
-            return;
-        }
-
-        // Check if API key is required but missing BEFORE starting the process
-        const apiKeyCheck = this.requiresApiKeyButMissing();
-        if (apiKeyCheck.missing) {
-            logger.warn('Translator', `Cannot start translation: ${apiKeyCheck.message}`);
-            this.notify(apiKeyCheck.message, 3000, "Please configure your API key in the Translation settings tab.");
-            return;
-        }
+        if (!this.canStartTranslation()) return;
 
         try {
             this.isProcessing = true;
@@ -361,8 +326,6 @@ export class GameTranslatorLogic {
             logger.info('Translator', `Taking new screenshot for: ${appName}`);
             const result = await call<ScreenshotResponse>('take_screenshot', appName);
 
-            // NOW show the overlay - after screenshot is captured
-            this.imageState.hideImage();
             this.imageState.startLoading("Processing");
 
             if (result) {
@@ -565,6 +528,43 @@ export class GameTranslatorLogic {
     setHasGeminiApiKey = (hasKey: boolean): void => {
         this.hasGeminiApiKey = hasKey;
         logger.debug('Translator', `Gemini API key available: ${hasKey}`);
+    }
+
+    // Runs all pre-checks that would prevent a translation from starting.
+    // Returns false and shows a toast if any check fails.
+    private canStartTranslation(): boolean {
+        const inputLang = this.getInputLanguage();
+        const targetLang = this.getTargetLanguage();
+        if (!inputLang && targetLang) {
+            logger.warn('Translator', 'Cannot start translation: languages not configured');
+            this.notify("Input language is not set", 3000, "Please select it in the plugin settings");
+            return false;
+        }
+        if (!targetLang && inputLang) {
+            logger.warn('Translator', 'Cannot start translation: languages not configured');
+            this.notify("Output language is not set", 3000, "Please select it in the plugin settings");
+            return false;
+        }
+        if (!inputLang && !targetLang) {
+            logger.warn('Translator', 'Cannot start translation: languages not configured');
+            this.notify("Output and Input languages are not set", 3000, "Please select them in the plugin settings");
+            return false;
+        }
+
+        if (inputLang !== 'auto' && inputLang === targetLang) {
+            logger.warn('Translator', `Cannot start translation: input and output language are both ${inputLang}`);
+            this.notify("Input and output languages can not be the same", 3000, "Select change them in plugin settings");
+            return false;
+        }
+
+        const apiKeyCheck = this.requiresApiKeyButMissing();
+        if (apiKeyCheck.missing) {
+            logger.warn('Translator', `Cannot start translation: ${apiKeyCheck.message}`);
+            this.notify(apiKeyCheck.message, 3000, "Please configure your API key in the Translation settings tab.");
+            return false;
+        }
+
+        return true;
     }
 
     // Check if the current provider configuration requires an API key that's missing
