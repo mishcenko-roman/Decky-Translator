@@ -4,8 +4,10 @@
 import json
 import logging
 import os
+import re
 import subprocess
 import threading
+import unicodedata
 from typing import List, Optional
 
 from .base import TranslationProvider, ProviderType
@@ -16,6 +18,138 @@ logger = logging.getLogger(__name__)
 
 WORKER_TIMEOUT = 120
 WORKER_STARTUP_TIMEOUT = 30
+
+# UI strings NLLB sometimes mistranslates things ("STEAM MENU" -> "СТОМ МЕНУ")
+_SKIP_TRANSLATE_TOKENS = {
+    "steam menu", "quick menu", "quick access", "main menu",
+    "b back", "a select", "a confirm", "x confirm", "y menu",
+    "escape back",
+    # Controller letters / shortcuts
+    "a", "b", "x", "y",
+    "l1", "l2", "l3", "l4", "l5",
+    "r1", "r2", "r3", "r4", "r5",
+    "lb", "rb", "lt", "rt",
+}
+
+_SHORT_TEXT_CHAR_LIMIT = 20
+
+# NLLB was trained on single sentences and the decoder is O(n^2) in length,
+# so splitting long inputs is a real speed win. In-batch dedup covers the
+# extra fragments.
+_SPLIT_SENTENCES_CHAR_LIMIT = 60
+
+# End punctuation + whitespace (ASCII and CJK). Candidates shorter than
+# 5 chars are rejected so "Mr." and "e.g." don't get split.
+_SENTENCE_END_RE = re.compile(r"[.!?。！？]+[\s　]+")
+
+# Comma/semicolon fallback for long prose without periods. Only runs when
+# a sentence is still above _CLAUSE_SPLIT_MIN_CHARS after the first pass.
+_CLAUSE_BREAK_RE = re.compile(r"[,;、，；][\s　]+")
+_CLAUSE_SPLIT_MIN_CHARS = 80
+
+
+_ZERO_WIDTH_CHARS = "\u200b\u200c\u200d\u200e\u200f\ufeff"
+
+_PUNCT_FOLD = {
+    "‘": "'", "’": "'", "‛": "'", "′": "'",
+    "“": '"', "”": '"', "„": '"', "‟": '"', "″": '"',
+    "–": "-", "—": "-", "‒": "-", "−": "-",
+    " ": " ", "　": " ",
+}
+_NORMALIZE_TABLE = str.maketrans(
+    {**_PUNCT_FOLD, **{c: None for c in _ZERO_WIDTH_CHARS}}
+)
+
+
+def _normalize_unicode(src: str) -> str:
+    return unicodedata.normalize("NFKC", src).translate(_NORMALIZE_TABLE)
+
+
+def _is_only_punct_or_digits(s: str) -> bool:
+    return all(c.isdigit() or c.isspace() or c in ".,;:!?-_()[]{}'\"" for c in s)
+
+
+def _is_number_heavy(s: str) -> bool:
+    """Mostly digits, at most 2 letters: "5 HP", "102", "3/10", etc"""
+    alpha = sum(1 for c in s if c.isalpha())
+    digit = sum(1 for c in s if c.isdigit())
+    return digit > 0 and alpha <= 2
+
+
+def _should_skip_translation(src: str) -> bool:
+    stripped = src.strip()
+    if not stripped:
+        return True
+    if len(stripped) > _SHORT_TEXT_CHAR_LIMIT:
+        return False
+    if stripped.lower() in _SKIP_TRANSLATE_TOKENS:
+        return True
+    if _is_only_punct_or_digits(stripped):
+        return True
+    if _is_number_heavy(stripped):
+        return True
+    return False
+
+
+def _normalize_caps(src: str):
+    """Lowercase short ALL-CAPS strings; NLLB handles cased text better.
+    Caller re-uppercases the output."""
+    stripped = src.strip()
+    if (
+        len(stripped) <= 30
+        and stripped.isupper()
+        and any(c.isalpha() for c in stripped)
+    ):
+        return stripped.lower(), True
+    return src, False
+
+
+def _split_sentences(text: str) -> List[str]:
+    text = text.strip()
+    if not text:
+        return []
+    sentences = []
+    start = 0
+    for match in _SENTENCE_END_RE.finditer(text):
+        end = match.end()
+        candidate = text[start:end].rstrip()
+        # Drop tiny pieces so "Mr." and "e.g." don't split.
+        if len(candidate) < 5:
+            continue
+        sentences.append(candidate)
+        start = end
+    if start < len(text):
+        tail = text[start:].rstrip()
+        if tail:
+            sentences.append(tail)
+
+    # Long fragments get a second pass on commas/semicolons.
+    result = []
+    for s in sentences:
+        if len(s) >= _CLAUSE_SPLIT_MIN_CHARS:
+            clauses = _split_on_clauses(s)
+            if len(clauses) > 1:
+                result.extend(clauses)
+                continue
+        result.append(s)
+    return result
+
+
+def _split_on_clauses(text: str) -> List[str]:
+    clauses = []
+    start = 0
+    for match in _CLAUSE_BREAK_RE.finditer(text):
+        end = match.end()
+        candidate = text[start:end].rstrip().rstrip(",;、，；")
+        if len(candidate) < 5:
+            continue
+        clauses.append(candidate)
+        start = end
+    if start < len(text):
+        tail = text[start:].rstrip()
+        if tail:
+            clauses.append(tail)
+    return clauses
 
 
 class CT2TranslateProvider(TranslationProvider):
@@ -195,42 +329,128 @@ class CT2TranslateProvider(TranslationProvider):
             if not load_result.get("ok"):
                 return texts
 
-        # Only append sentence-ending punctuation to longer texts that
-        # look like truncated sentences. Short texts (labels, menu items)
-        # get hallucinated into full sentences if we add a period.
         SENTENCE_ENDERS = set('.!?\u3002\uff01\uff1f')
-        sanitized = []
+        slots = []
+        flat_fragments = []
         for t in texts:
-            stripped = t.rstrip()
-            word_count = len(stripped.split())
-            if stripped and stripped[-1] not in SENTENCE_ENDERS and word_count > 3:
-                sanitized.append(stripped + '.')
-            else:
-                sanitized.append(stripped if stripped else t)
+            normalized = _normalize_unicode(t)
+            if _should_skip_translation(normalized):
+                slots.append({"source": t, "kind": "skip", "caps": False,
+                              "start": 0, "end": 0})
+                continue
 
-        logger.debug(f"CT2 translate: {len(sanitized)} texts, {src_nllb} -> {tgt_nllb}")
-        for i, t in enumerate(sanitized):
-            logger.debug(f"  CT2 input[{i}]: ({len(t)} chars) {t[:200]}")
+            body, was_caps = _normalize_caps(normalized)
+
+            fragments = [body]
+            if len(body) >= _SPLIT_SENTENCES_CHAR_LIMIT:
+                split = _split_sentences(body)
+                if len(split) > 1:
+                    fragments = split
+
+            # Add a period to longer unpunctuated fragments so NLLB doesn't
+            # invent a continuation.
+            sanitized = []
+            for f in fragments:
+                stripped = f.rstrip()
+                if not stripped:
+                    sanitized.append(f)
+                    continue
+                word_count = len(stripped.split())
+                if stripped[-1] not in SENTENCE_ENDERS and word_count > 3:
+                    sanitized.append(stripped + '.')
+                else:
+                    sanitized.append(stripped)
+
+            start = len(flat_fragments)
+            flat_fragments.extend(sanitized)
+            slots.append({
+                "source": t, "kind": "translate", "caps": was_caps,
+                "start": start, "end": len(flat_fragments),
+            })
+
+        skipped = sum(1 for s in slots if s["kind"] == "skip")
+
+        if not flat_fragments:
+            logger.debug(
+                f"CT2 translate: {len(texts)} inputs, all skipped, {src_nllb} -> {tgt_nllb}"
+            )
+            return [s["source"] for s in slots]
+
+        # Dedupe identical fragments (repeated UI strings, names, HP/Lv labels)
+        unique_fragments = []
+        dedupe_index = {}
+        unique_for_fragment = []
+        for f in flat_fragments:
+            idx = dedupe_index.get(f)
+            if idx is None:
+                idx = len(unique_fragments)
+                dedupe_index[f] = idx
+                unique_fragments.append(f)
+            unique_for_fragment.append(idx)
+
+        logger.debug(
+            f"CT2 translate: {len(texts)} inputs, {len(flat_fragments)} fragments "
+            f"({len(unique_fragments)} unique, {skipped} skipped), "
+            f"{src_nllb} -> {tgt_nllb}"
+        )
+        for i, f in enumerate(unique_fragments):
+            logger.debug(f"  CT2 input[{i}]: ({len(f)} chars) {f[:200]}")
 
         result = self._send_command({
             "cmd": "translate",
-            "texts": sanitized,
+            "texts": unique_fragments,
             "src_lang": src_nllb,
             "tgt_lang": tgt_nllb,
         })
-        if result.get("ok"):
-            translations = result.get("translations", texts)
-            for i, t in enumerate(translations):
-                src_len = len(texts[i]) if i < len(texts) else 0
-                logger.debug(f"  CT2 output[{i}]: ({len(t)} chars, input was {src_len}) {t[:200]}")
-                if src_len > 0 and len(t) < src_len * 0.3:
-                    logger.warning(f"  CT2 possible truncation: output is {len(t)}/{src_len} chars ({len(t)*100//src_len}%)")
-            if result.get("token_counts"):
-                logger.debug(f"  CT2 token counts: {result['token_counts']}")
-            return translations
-        else:
+        if not result.get("ok"):
             logger.error(f"Translation failed: {result.get('error')}")
             return texts
+
+        unique_translations = result.get("translations")
+        if not isinstance(unique_translations, list) or len(unique_translations) != len(unique_fragments):
+            logger.error(
+                f"Worker returned malformed response: expected {len(unique_fragments)} "
+                f"translations, got {len(unique_translations) if isinstance(unique_translations, list) else type(unique_translations).__name__}"
+            )
+            return texts
+
+        flat_translations = [unique_translations[i] for i in unique_for_fragment]
+        if result.get("token_counts"):
+            logger.debug(f"  CT2 token counts: {result['token_counts']}")
+        if result.get("confidences"):
+            logger.debug(f"  CT2 per-token log-probs: {result['confidences']}")
+
+        translations = []
+        for slot in slots:
+            if slot["kind"] == "skip":
+                translations.append(slot["source"])
+                continue
+            pieces = flat_translations[slot["start"]:slot["end"]]
+            out = " ".join(p for p in pieces if p)
+            if slot["caps"]:
+                out = out.upper()
+            translations.append(out)
+
+        for i, t in enumerate(translations):
+            src_len = len(texts[i]) if i < len(texts) else 0
+            logger.debug(
+                f"  CT2 output[{i}]: ({len(t)} chars, input was {src_len}) {t[:200]}"
+            )
+            # Multi-fragment slots can shrink on rejoin
+            slot = slots[i]
+            fragment_count = slot["end"] - slot["start"]
+            if (
+                src_len > 0
+                and len(t) < src_len * 0.3
+                and slot["kind"] == "translate"
+                and fragment_count == 1
+            ):
+                logger.warning(
+                    f"  CT2 possible truncation: output is {len(t)}/{src_len} chars "
+                    f"({len(t)*100//src_len}%)"
+                )
+
+        return translations
 
     def _kill_worker(self):
         with self._worker_lock:
