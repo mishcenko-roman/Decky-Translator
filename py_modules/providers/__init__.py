@@ -420,6 +420,7 @@ class ProviderManager:
         return {
             "downloaded": self._model_manager.is_model_downloaded(),
             "size": self._model_manager.get_model_size(),
+            "approx_size_mb": self._model_manager.get_approx_size_mb(),
             "downloading": dl_status["downloading"],
             "progress": dl_status["progress"],
             "error": dl_status["error"],
@@ -431,14 +432,13 @@ class ProviderManager:
         return False
 
     def delete_nllb_model(self):
-        if self._model_manager:
-            ct2 = self._translation_providers.get(ProviderType.CT2)
-            if ct2 and hasattr(ct2, '_loaded_model_dir'):
-                model_dir = self._model_manager.get_model_dir()
-                if ct2._loaded_model_dir == model_dir:
-                    ct2.unload_current_model()
-            return self._model_manager.delete_model()
-        return False
+        if not self._model_manager:
+            return False
+        ct2 = self._translation_providers.get(ProviderType.CT2)
+        if ct2 and hasattr(ct2, '_loaded_model_dir'):
+            if ct2._loaded_model_dir == self._model_manager.get_model_dir():
+                ct2.unload_current_model()
+        return self._model_manager.delete_model()
 
     def cancel_nllb_download(self):
         if self._model_manager:

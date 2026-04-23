@@ -70,8 +70,8 @@ class CT2TranslateProvider(TranslationProvider):
             env['PYTHONPATH'] = self._py_modules_path
             env['PYTHONNOUSERSITE'] = '1'
             env['PYTHONDONTWRITEBYTECODE'] = '1'
-            env['OMP_NUM_THREADS'] = '2'
-            env['MKL_NUM_THREADS'] = '2'
+            env['OMP_NUM_THREADS'] = '4'
+            env['MKL_NUM_THREADS'] = '4'
 
             try:
                 self._worker_process = subprocess.Popen(

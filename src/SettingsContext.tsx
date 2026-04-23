@@ -74,7 +74,7 @@ const initialSettings: Settings = {
     translatedTextFontStyle: 'normal',
     hideIdenticalTranslations: false,
     allowLabelGrowth: false,
-    customRecognitionSettings: false
+    customRecognitionSettings: false,
 };
 
 // Create the reducer
@@ -148,7 +148,7 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({
                     translatedTextFontStyle: serverSettings.translated_text_font_style ?? 'normal',
                     hideIdenticalTranslations: serverSettings.hide_identical_translations ?? false,
                     allowLabelGrowth: serverSettings.allow_label_growth ?? false,
-                    customRecognitionSettings: serverSettings.custom_recognition_settings ?? false
+                    customRecognitionSettings: serverSettings.custom_recognition_settings ?? false,
                 };
 
                 // Update settings in context

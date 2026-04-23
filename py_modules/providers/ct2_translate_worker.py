@@ -84,6 +84,21 @@ def main():
             )
             tokenizer = spm.SentencePieceProcessor(sp_model)
             loaded_model_dir = model_dir
+
+            # Warmup
+            try:
+                translator.translate_batch(
+                    [
+                        ["eng_Latn", "▁hello", "</s>"],
+                        ["eng_Latn", "▁this", "▁is", "▁a", "▁warmup", "▁batch", "</s>"],
+                    ],
+                    target_prefix=[["eng_Latn"]] * 2,
+                    beam_size=1,
+                    max_decoding_length=12,
+                )
+            except Exception:
+                pass
+
             return {"ok": True}
         except Exception as e:
             unload_model()
@@ -116,21 +131,29 @@ def main():
                 beam = 1
                 length_pen = 0.2
                 no_repeat = 3
-                max_output = max(max_input_tokens + 2, 3)
+                rep_pen = 1.2  # short path only
+                # EN->JA/KO/ZH/DE can expand >1.5x on 2-4 token inputs
+                max_output = max(int(max_input_tokens * 2) + 2, 5)
             else:
-                beam = 4
+                # 1.3B distilled is stable at beam=1, so skip beam search and
+                # drop both repetition guards (no_repeat=0 and rep_pen=1.0
+                # disable them).
+                beam = 1
+                no_repeat = 0
+                rep_pen = 1.0
                 length_pen = 1.0
-                no_repeat = 4
-                max_output = max(max_input_tokens * 3, 10)
+                # 1.5x leaves headroom while capping the tail on bad decodes.
+                max_output = max(int(max_input_tokens * 1.5) + 5, 10)
 
-            max_output = min(max_output, 512)
+            max_output = min(max_output, 256)
 
             results = translator.translate_batch(
                 tokenized,
                 target_prefix=[[tgt_lang]] * len(texts),
                 beam_size=beam,
                 max_decoding_length=max_output,
-                repetition_penalty=1.2,
+                max_input_length=512,
+                repetition_penalty=rep_pen,
                 length_penalty=length_pen,
                 no_repeat_ngram_size=no_repeat,
                 disable_unk=True,

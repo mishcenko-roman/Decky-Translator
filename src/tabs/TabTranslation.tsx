@@ -203,7 +203,8 @@ const GeminiModelSelector: VFC<{
 const CT2ModelManager: VFC = () => {
     const { settings } = useSettings();
     const [modelStatus, setModelStatus] = useState<any>({
-        downloaded: false, size: 0, downloading: false, progress: 0, error: null
+        downloaded: false, size: 0, approx_size_mb: 1410,
+        downloading: false, progress: 0, error: null,
     });
     const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -260,6 +261,10 @@ const CT2ModelManager: VFC = () => {
         }} />
     );
 
+    const sizeHint = modelStatus.approx_size_mb
+        ? `~${(modelStatus.approx_size_mb / 1024).toFixed(1)} GB`
+        : '';
+
     return (
         <>
             {isAutoDetect && (
@@ -279,7 +284,7 @@ const CT2ModelManager: VFC = () => {
                         layout="below"
                         icon={statusDot}
                         label="Model not installed"
-                        description="Download required to use offline translation (~650 MB)"
+                        description={`Download required to use offline translation${sizeHint ? ` (${sizeHint})` : ''}`}
                         onClick={handleDownload}
                     >
                         Download model
@@ -792,7 +797,7 @@ export const TabTranslation: VFC = () => {
                                     </div>
                                     <ProviderRating quality={1} speed={1} />
                                     <div>- Offline translation, no internet needed</div>
-                                    <div>- One-time ~600 MB download required</div>
+                                    <div>- One-time ~1.4 GB download required</div>
                                     <div>- Single model covers most languages</div>
                                     <div>- Auto-detect not supported, need to specify source language</div>
                                     <div>- Experimental support</div>

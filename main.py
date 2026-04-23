@@ -1111,7 +1111,7 @@ class Plugin:
                 "translated_text_font_style": self._settings.get_setting("translated_text_font_style", "normal"),
                 "hide_identical_translations": self._settings.get_setting("hide_identical_translations", False),
                 "allow_label_growth": self._settings.get_setting("allow_label_growth", False),
-                "custom_recognition_settings": self._settings.get_setting("custom_recognition_settings", False)
+                "custom_recognition_settings": self._settings.get_setting("custom_recognition_settings", False),
             }
             return settings
         except Exception as e:

@@ -41,13 +41,17 @@ NLLB_LANG_MAP = {
 REQUIRED_MODEL_FILES = ["model.bin", "sentencepiece.bpe.model", "config.json", "shared_vocabulary.txt"]
 OPTIONAL_MODEL_FILES = ["tokenizer_config.json", "special_tokens_map.json"]
 
-HF_REPO = "JustFrederik/nllb-200-distilled-600M-ct2-int8"
+HF_REPO = "JustFrederik/nllb-200-distilled-1.3B-ct2-int8"
 HF_BASE_URL = f"https://huggingface.co/{HF_REPO}/resolve/main/{{filename}}"
-MODEL_DIR_NAME = "nllb-200-distilled-600M"
+MODEL_DIR_NAME = "nllb-200-distilled-1.3B"
+MODEL_APPROX_MB = 1410
+
+# Old model dirs cleaned up on startup - safeguard for future
+LEGACY_MODEL_DIRS = ["nllb-200-distilled-600M"]
 
 
 class ModelManager:
-    """Manages the single NLLB-200 model download and storage."""
+    """Manages the single NLLB model download and storage."""
 
     def __init__(self, models_dir: str):
         self._models_dir = models_dir
@@ -60,6 +64,7 @@ class ModelManager:
 
         os.makedirs(models_dir, exist_ok=True)
         self._cleanup_partial_downloads()
+        self._cleanup_legacy_models()
 
     def _cleanup_partial_downloads(self):
         """Remove any leftover .downloading directories from interrupted downloads."""
@@ -73,12 +78,21 @@ class ModelManager:
         except Exception as e:
             logger.error(f"Error cleaning up partial downloads: {e}")
 
+    def _cleanup_legacy_models(self):
+        """Delete obsolete model directories left over from older plugin builds."""
+        for name in LEGACY_MODEL_DIRS:
+            path = os.path.join(self._models_dir, name)
+            if os.path.isdir(path):
+                try:
+                    shutil.rmtree(path)
+                    logger.info(f"Removed legacy model directory: {name}")
+                except Exception as e:
+                    logger.error(f"Could not remove legacy model {name}: {e}")
+
     def get_model_dir(self) -> str:
-        """Get the directory path for the NLLB model."""
         return os.path.join(self._models_dir, MODEL_DIR_NAME)
 
     def is_model_downloaded(self) -> bool:
-        """Check if all required model files exist."""
         model_dir = self.get_model_dir()
         if not os.path.isdir(model_dir):
             return False
@@ -88,7 +102,6 @@ class ModelManager:
         )
 
     def get_model_size(self) -> int:
-        """Get total size of the downloaded model in bytes."""
         model_dir = self.get_model_dir()
         if not os.path.isdir(model_dir):
             return 0
@@ -99,16 +112,16 @@ class ModelManager:
                 total += os.path.getsize(fp)
         return total
 
+    def get_approx_size_mb(self) -> int:
+        return MODEL_APPROX_MB
+
     def get_nllb_lang_code(self, plugin_code: str) -> Optional[str]:
-        """Map a plugin language code to its NLLB-200 language code."""
         return NLLB_LANG_MAP.get(plugin_code)
 
     def start_download(self) -> bool:
-        """Start downloading the NLLB model in a background thread. Returns False if already downloading."""
         with self._lock:
             if self._downloading:
                 return False
-
             self._downloading = True
             self._download_progress = 0.0
             self._download_error = None
@@ -132,7 +145,7 @@ class ModelManager:
 
             all_files = REQUIRED_MODEL_FILES + OPTIONAL_MODEL_FILES
 
-            for i, filename in enumerate(all_files):
+            for filename in all_files:
                 if self._download_cancel:
                     raise Exception("Download cancelled")
 
@@ -173,7 +186,6 @@ class ModelManager:
                 except requests.Timeout:
                     raise Exception("Download timed out. Check internet connection.")
 
-            # Verify required files were downloaded
             for req_file in REQUIRED_MODEL_FILES:
                 if not os.path.exists(os.path.join(temp_dir, req_file)):
                     raise Exception(f"Missing required file after download: {req_file}")
@@ -199,12 +211,10 @@ class ModelManager:
             logger.error(f"NLLB model download failed: {e}")
 
     def cancel_download(self):
-        """Cancel an in-progress download."""
         with self._lock:
             self._download_cancel = True
 
     def get_download_status(self) -> Dict:
-        """Get current download status."""
         with self._lock:
             return {
                 "downloading": self._downloading,
@@ -213,12 +223,10 @@ class ModelManager:
             }
 
     def clear_download_error(self):
-        """Clear any previous download error."""
         with self._lock:
             self._download_error = None
 
     def delete_model(self) -> bool:
-        """Delete the downloaded model."""
         model_dir = self.get_model_dir()
         if os.path.isdir(model_dir):
             try:
