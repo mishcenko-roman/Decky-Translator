@@ -256,7 +256,7 @@ export const TabControls: VFC<TabControlsProps> = ({ inputDiagnostics }) => {
                     <ToggleField
                         checked={settings.pauseGameOnOverlay}
                         label="Pause Game While Translating"
-                        description="Pauses the active game and allows you to read the text more thoughtfully. The game is resumed when overlay is dismissed"
+                        description={<>Pauses the active game and allows you to read the text more thoughtfully. The game is resumed when overlay is dismissed.<br /><br />Doesn't work well with game streaming (moonlight, geforce now, remote play, etc)</>}
                         onChange={(value) => {
                             updateSetting('pauseGameOnOverlay', value, 'Pause game while translating');
                         }}
