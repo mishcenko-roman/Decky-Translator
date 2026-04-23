@@ -24,6 +24,13 @@ import time
 
 IDLE_TIMEOUT = 600  # 10 minutes
 
+
+def _has_oscillatory_repetition(tokens):
+    if len(tokens) < 9:
+        return False
+    trigrams = [tuple(tokens[i:i + 3]) for i in range(len(tokens) - 2)]
+    return len(set(trigrams)) / len(trigrams) < 0.5
+
 # Try to set PR_SET_PDEATHSIG so we die if parent crashes
 try:
     import ctypes
@@ -137,7 +144,8 @@ def main():
             else:
                 # 1.3B distilled is stable at beam=1, so skip beam search and
                 # drop both repetition guards (no_repeat=0 and rep_pen=1.0
-                # disable them).
+                # disable them). The oscillatory trigram check below is the
+                # backstop if the model does loop.
                 beam = 1
                 no_repeat = 0
                 rep_pen = 1.0
@@ -164,28 +172,56 @@ def main():
             # Detokenize and validate each translation
             translations = []
             token_counts = []
+            confidences = []
             for i, result in enumerate(results):
+                src_text = texts[i]
+                input_token_count = len(tokenized[i]) - 2  # minus lang token and </s>
+                # NLLB occasionally returns no hypothesis on weird input.
+                # Fall back to the source instead of crashing or emitting ""
+                if not result.hypotheses or not result.hypotheses[0]:
+                    translations.append(src_text)
+                    token_counts.append({"input": input_token_count, "output": 0})
+                    confidences.append(0.0)
+                    continue
                 tokens = result.hypotheses[0]
-                score = result.scores[0]
+                score = result.scores[0] if result.scores else 0.0
                 if tokens and tokens[0] == tgt_lang:
                     tokens = tokens[1:]
-                input_token_count = len(tokenized[i]) - 2  # minus lang token and </s>
+                # Only the target-lang prefix came out - nothing to translate.
+                # Return source instead of an empty string.
+                if not tokens:
+                    translations.append(src_text)
+                    token_counts.append({"input": input_token_count, "output": 0})
+                    confidences.append(round(score, 3))
+                    continue
                 token_counts.append({"input": input_token_count, "output": len(tokens)})
+                # Per-token log-prob normalizes across output lengths
+                per_token = score / max(len(tokens), 1)
+                confidences.append(round(per_token, 3))
                 text = tokenizer.decode(tokens)
 
-                # Hallucination guard: if the model isn't confident about a
-                # short input, or the output is way longer than the source,
-                # fall back to the original text.
-                src_text = texts[i]
+                # Hallucination guard
+                fallback = False
                 if input_token_count <= 4:
-                    low_confidence = score < -1.5
-                    blown_up = len(text) > len(src_text) * 2.5
-                    if low_confidence or blown_up:
-                        text = src_text
+                    if score < -1.5 or len(tokens) > input_token_count * 2 + 2:
+                        fallback = True
+                else:
+                    if per_token < -1.0 and len(tokens) > input_token_count * 2:
+                        fallback = True
+                    elif _has_oscillatory_repetition(tokens):
+                        fallback = True
+
+                if fallback:
+                    text = src_text
 
                 translations.append(text)
 
-            return {"ok": True, "translations": translations, "token_counts": token_counts}
+            return {
+                "ok": True,
+                "translations": translations,
+                "token_counts": token_counts,
+                "confidences": confidences,
+            }
         except Exception as e:
             return {"ok": False, "error": f"Translation failed: {e}"}
 
