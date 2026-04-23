@@ -86,7 +86,7 @@ const GameTranslator: VFC<{ logic: GameTranslatorLogic }> = ({ logic }) => {
 
         const fetchProviderStatus = async () => {
             try {
-                const result = await call<any>('get_provider_status');
+                const result = await call<[], any>('get_provider_status');
                 if (result) {
                     setProviderStatus(result);
                 }

@@ -47,7 +47,7 @@ export class TextTranslator {
             }
 
             // Call the Python backend method for translation, now including input language
-            const response = await call<TranslatedRegion[] | ErrorResponse>(
+            const response = await call<[TextRegion[], string, string], TranslatedRegion[] | ErrorResponse>(
                 'translate_text',
                 textRegions,
                 this.targetLanguage,

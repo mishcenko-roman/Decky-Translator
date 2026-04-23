@@ -144,7 +144,7 @@ const GeminiModelSelector: VFC<{
         if (!hasApiKey) return;
         setLoading(true);
         try {
-            const available = await call<string[]>('get_gemini_models');
+            const available = await call<[], string[]>('get_gemini_models');
             if (available && available.length > 0) {
                 const availableSet = new Set(available);
                 const filtered = knownGeminiModels.filter(m => availableSet.has(m.data));
@@ -210,7 +210,7 @@ const CT2ModelManager: VFC = () => {
 
     const refreshStatus = useCallback(async () => {
         try {
-            const status = await call<any>('get_nllb_model_status');
+            const status = await call<[], any>('get_nllb_model_status');
             if (status) setModelStatus(status);
         } catch (e) { /* ignore */ }
     }, []);
@@ -234,7 +234,7 @@ const CT2ModelManager: VFC = () => {
 
     const handleDownload = async () => {
         await call('clear_nllb_model_error');
-        const started = await call<boolean>('download_nllb_model');
+        const started = await call<[], boolean>('download_nllb_model');
         if (started) {
             setModelStatus((prev: any) => ({ ...prev, downloading: true, progress: 0, error: null }));
         }

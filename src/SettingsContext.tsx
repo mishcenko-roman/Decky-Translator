@@ -115,7 +115,7 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({
     // Load all settings at once
     const loadAllSettings = async () => {
         try {
-            const serverSettings = await call<any>('get_all_settings');
+            const serverSettings = await call<[], any>('get_all_settings');
 
             if (serverSettings) {
 
@@ -304,7 +304,7 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({
             }
 
             // Save to backend
-            const result = await call<boolean>('set_setting', backendKey, value);
+            const result = await call<[string, any], boolean>('set_setting', backendKey, value);
 
             if (result) {
                 // if (label) logic.notify(`${label} updated successfully`);

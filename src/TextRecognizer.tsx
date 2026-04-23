@@ -694,7 +694,7 @@ export class TextRecognizer {
 
     async recognizeText(imageData: string): Promise<TextRegion[]> {
         try {
-            const response = await call<TextRegion[]>('recognize_text', imageData);
+            const response = await call<[string], TextRegion[]>('recognize_text', imageData);
 
             if (response) {
                 const regions = response;
@@ -717,7 +717,7 @@ export class TextRecognizer {
 
     async recognizeTextFile(imagePath: string): Promise<TextRegion[]> {
         try {
-            const response = await call<TextRegion[] | ErrorResponse>('recognize_text_file', imagePath);
+            const response = await call<[string], TextRegion[] | ErrorResponse>('recognize_text_file', imagePath);
             if (response) {
                 if (isErrorResponse(response)) {
                     const errorResponse = response as ErrorResponse;
