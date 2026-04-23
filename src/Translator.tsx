@@ -326,69 +326,50 @@ export class GameTranslatorLogic {
             logger.info('Translator', `Taking new screenshot for: ${appName}`);
             const result = await call<[string], ScreenshotResponse>('take_screenshot', appName);
 
+            if (!result || !result.path || !result.base64) {
+                logger.warn('Translator', 'Screenshot capture failed, not opening overlay');
+                this.notify('Screen capture failed', 2500, 'Try pressing the shortcut again');
+                return;
+            }
+
+            logger.debug('Translator', `Screenshot captured, path: ${result.path}, base64 length: ${result.base64.length}`);
+
             this.imageState.startLoading("Processing");
+            this.imageState.showImage(result.base64);
+            this.imageState.updateProcessingStep("Recognizing text");
 
-            if (result) {
-                logger.debug('Translator', `Screenshot captured, path: ${result.path}`);
+            const textRegions = await this.textRecognizer.recognizeTextFile(result.path);
+            logger.info('Translator', `Found ${textRegions.length} text regions`);
 
-                if (result.base64) {
-                    // Log image data length for debugging
-                    logger.debug('Translator', `Received base64 image data, length: ${result.base64.length}`);
-
-                    // Immediately show the new screenshot on the overlay
-                    this.imageState.showImage(result.base64);
-
-                    // Then start the OCR process
-                    this.imageState.updateProcessingStep("Recognizing text");
-
-                    // Check if we have a valid path
-                    if (!result.path) {
-                        logger.warn('Translator', 'Screenshot path is empty, aborting OCR process');
-                        this.imageState.hideImage();
-                        return;
-                    }
-
-                    // Process with OCR
-                    const textRegions = await this.textRecognizer.recognizeTextFile(result.path);
-                    logger.info('Translator', `Found ${textRegions.length} text regions`);
-
-                    if (textRegions.length > 0) {
-                        const alreadyTranslated = textRegions.every(r => r.translatedText);
-                        if (!alreadyTranslated) {
-                            this.imageState.updateProcessingStep("Translating text");
-                        }
-
-                        // Translate text (skips backend call if already translated by OCR provider)
-                        let translatedRegions = await this.textTranslator.translateText(textRegions);
-                        logger.info('Translator', `Translation complete: ${translatedRegions.length} regions`);
-
-                        if (this.hideIdenticalTranslations) {
-                            const before = translatedRegions.length;
-                            translatedRegions = translatedRegions.filter(r =>
-                                r.translatedText.trim().toLowerCase() !== r.text.trim().toLowerCase()
-                            );
-                            if (translatedRegions.length < before) {
-                                logger.info('Translator', `Filtered ${before - translatedRegions.length} identical translations`);
-                            }
-                        }
-
-                        this.imageState.showTranslatedImage(result.base64, translatedRegions);
-                    } else {
-                        // No text found, show message
-                        this.imageState.updateProcessingStep("No text found");
-
-                        // Hide overlay after a short delay
-                        setTimeout(() => {
-                            this.imageState.hideImage();
-                        }, 2000); // 2 seconds delay
-                    }
-                } else {
-                    logger.warn('Translator', 'No base64 data in screenshot response');
-                    this.imageState.hideImage();
+            if (textRegions.length > 0) {
+                const alreadyTranslated = textRegions.every(r => r.translatedText);
+                if (!alreadyTranslated) {
+                    this.imageState.updateProcessingStep("Translating text");
                 }
+
+                // Translate text (skips backend call if already translated by OCR provider)
+                let translatedRegions = await this.textTranslator.translateText(textRegions);
+                logger.info('Translator', `Translation complete: ${translatedRegions.length} regions`);
+
+                if (this.hideIdenticalTranslations) {
+                    const before = translatedRegions.length;
+                    translatedRegions = translatedRegions.filter(r =>
+                        r.translatedText.trim().toLowerCase() !== r.text.trim().toLowerCase()
+                    );
+                    if (translatedRegions.length < before) {
+                        logger.info('Translator', `Filtered ${before - translatedRegions.length} identical translations`);
+                    }
+                }
+
+                this.imageState.showTranslatedImage(result.base64, translatedRegions);
             } else {
-                logger.warn('Translator', 'Screenshot capture failed');
-                this.imageState.hideImage();
+                // No text found, show message
+                this.imageState.updateProcessingStep("No text found");
+
+                // Hide overlay after a short delay
+                setTimeout(() => {
+                    this.imageState.hideImage();
+                }, 2000); // 2 seconds delay
             }
         } catch (error) {
             logger.error('Translator', 'Screenshot and translation error', error);

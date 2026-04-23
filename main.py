@@ -1152,12 +1152,9 @@ class Plugin:
             logger.info("Screenshot already in progress, skipping")
             raise RuntimeError("Screenshot already in progress")
 
-        # Minimal test‑pattern in case encoding fails or file isn't created
-        test_base64 = (
-            "data:image/png;base64,"
-            "iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAFUlEQVR42mNk+M9Qz0AEYBxVSF+"
-            "FABJADveWyWxwAAAAAElFTkSuQmCC"
-        )
+        # Real captures run 100KB+, tiny PNGs are videoconvert corruption or missing frames
+        MIN_VALID_SIZE = 30_000
+        MAX_ATTEMPTS = 3
 
         try:
             _processing_lock = True
@@ -1169,7 +1166,7 @@ class Plugin:
                 app_name = app_name.replace(":", " ").replace("/", " ").strip()
 
             # Build filename
-            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S_%f")
             os.makedirs(self._screenshotPath, exist_ok=True)
             screenshot_path = f"{self._screenshotPath}/{app_name}_{timestamp}.png"
             logger.debug(f"Screenshot path: {screenshot_path}")
@@ -1185,80 +1182,89 @@ class Plugin:
             # GStreamer pipeline: grab a few frames then EOS
             # Using num-buffers=5 to skip potentially invalid first frames from PipeWire
             cmd = (
-                # keep only the path to your plugins, without GST_VAAPI_ALL_DRIVERS
                 f"GST_PLUGIN_PATH={GSTPLUGINSPATH} "
                 f"LD_LIBRARY_PATH={DEPSPATH} "
                 f"gst-launch-1.0 -e "
-                # capture multiple buffers to ensure valid frame (pngenc snapshot=true saves last)
                 f"pipewiresrc do-timestamp=true num-buffers=5 ! "
-                # let videoconvert work by default (CPU), it will create normal raw
                 f"videoconvert ! "
-                # then directly to PNG
                 f"pngenc snapshot=true ! "
                 f"filesink location=\"{screenshot_path}\""
             )
             logger.debug(f"GStreamer command: {cmd}")
 
-            # Launch subprocess asynchronously
-            proc = await asyncio.create_subprocess_exec(
-                'gst-launch-1.0',
-                '-e',
-                'pipewiresrc',
-                'do-timestamp=true',
-                'num-buffers=5',
-                '!',
-                'videoconvert',
-                '!',
-                'pngenc',
-                'snapshot=true',
-                '!',
-                'filesink',
-                f'location={screenshot_path}',
-                stdout=PIPE,
-                stderr=PIPE,
-                env=env
-            )
-            # Wait for pipeline to finish (it will exit after 1 frame), with timeout
-            try:
-                out, err = await asyncio.wait_for(proc.communicate(), timeout=5)
-            except asyncio.TimeoutError:
-                logger.warning("GStreamer timed out after 5s, sending SIGINT for graceful shutdown")
-                proc.send_signal(signal.SIGINT)
+            for attempt in range(1, MAX_ATTEMPTS + 1):
+                if attempt > 1:
+                    await asyncio.sleep(0.3)
+                    logger.info(f"Retrying screenshot capture (attempt {attempt}/{MAX_ATTEMPTS})")
+
+                if os.path.exists(screenshot_path):
+                    try:
+                        os.remove(screenshot_path)
+                    except OSError as e:
+                        logger.warning(f"Could not remove stale screenshot file: {e}")
+
+                proc = await asyncio.create_subprocess_exec(
+                    'gst-launch-1.0',
+                    '-e',
+                    'pipewiresrc',
+                    'do-timestamp=true',
+                    'num-buffers=5',
+                    '!',
+                    'videoconvert',
+                    '!',
+                    'pngenc',
+                    'snapshot=true',
+                    '!',
+                    'filesink',
+                    f'location={screenshot_path}',
+                    stdout=PIPE,
+                    stderr=PIPE,
+                    env=env
+                )
+
+                timed_out = False
                 try:
-                    # give 2 more seconds to finish after SIGINT
-                    out, err = await asyncio.wait_for(proc.communicate(), timeout=2)
+                    out, err = await asyncio.wait_for(proc.communicate(), timeout=2.5)
                 except asyncio.TimeoutError:
-                    logger.error("GStreamer did not exit within 2s after SIGINT, killing process")
-                    proc.kill()
-                    out, err = await proc.communicate()
+                    timed_out = True
+                    logger.warning(f"Attempt {attempt}: GStreamer timed out after 2.5s, sending SIGINT")
+                    proc.send_signal(signal.SIGINT)
+                    try:
+                        out, err = await asyncio.wait_for(proc.communicate(), timeout=1)
+                    except asyncio.TimeoutError:
+                        logger.error(f"Attempt {attempt}: GStreamer did not exit within 1s after SIGINT, killing process")
+                        proc.kill()
+                        out, err = await proc.communicate()
 
-            logger.debug(f"GStreamer stdout: {out.decode().strip() or 'None'}")
-            stderr_output = err.decode().strip()
-            if stderr_output:
-                logger.debug(f"GStreamer stderr: {stderr_output}")
-            logger.debug(f"GStreamer return code: {proc.returncode}")
+                stderr_output = err.decode().strip()
+                if stderr_output:
+                    logger.debug(f"Attempt {attempt}: GStreamer stderr: {stderr_output}")
+                logger.debug(f"Attempt {attempt}: GStreamer return code: {proc.returncode} (timed_out={timed_out})")
 
-            # Give the filesystem a moment - seems to work without it
-            # await asyncio.sleep(0.25)
+                if not os.path.exists(screenshot_path):
+                    logger.warning(f"Attempt {attempt}: screenshot file not created")
+                    continue
 
-            # Check file and return
-            if os.path.exists(screenshot_path) and os.path.getsize(screenshot_path) > 0:
                 size = os.path.getsize(screenshot_path)
-                logger.debug(f"Screenshot saved ({size} bytes)")
+                if size < MIN_VALID_SIZE:
+                    logger.warning(f"Attempt {attempt}: screenshot too small ({size} bytes, min {MIN_VALID_SIZE}) - likely corrupted frame")
+                    continue
+
                 base64_data = get_base64_image(screenshot_path)
-                if base64_data:
-                    return {"path": screenshot_path, "base64": base64_data}
-                else:
-                    logger.error("Failed to encode screenshot to base64 — returning test pattern")
-                    return {"path": screenshot_path, "base64": test_base64}
-            else:
-                logger.error(f"Screenshot file missing or empty: {screenshot_path}")
-                return {"path": "", "base64": test_base64}
+                if not base64_data:
+                    logger.warning(f"Attempt {attempt}: base64 encoding failed for {screenshot_path}")
+                    continue
+
+                logger.debug(f"Screenshot saved ({size} bytes) on attempt {attempt}")
+                return {"path": screenshot_path, "base64": base64_data}
+
+            logger.error(f"Screenshot capture failed after {MAX_ATTEMPTS} attempts")
+            return {"path": "", "base64": ""}
 
         except Exception as e:
             logger.error(f"Screenshot error: {e}")
             logger.error(traceback.format_exc())
-            return {"path": "", "base64": test_base64}
+            return {"path": "", "base64": ""}
 
         finally:
             _processing_lock = False
