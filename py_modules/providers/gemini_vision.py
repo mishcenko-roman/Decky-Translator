@@ -175,7 +175,7 @@ class GeminiVisionProvider(OCRProvider):
         return (
             "You detect and translate text in game screenshots. "
             "For each text region, return its box_2d as [ymin, xmin, ymax, xmax] in normalized 0-1000 coordinates. "
-            "Return a JSON array. Limit to 25 text regions."
+            "Return a JSON array covering every readable text region in the image."
         )
 
     def _build_prompt(self, source_lang: str, target_lang: str) -> str:
@@ -220,7 +220,7 @@ class GeminiVisionProvider(OCRProvider):
             }],
             "generationConfig": {
                 "temperature": 0.1,
-                "maxOutputTokens": 8192,
+                "maxOutputTokens": 32768,
                 "thinkingConfig": {
                     "thinkingBudget": 0,
                 },
@@ -272,8 +272,22 @@ class GeminiVisionProvider(OCRProvider):
             raise NetworkError(f"Gemini API error ({response.status_code}): {response.text[:200]}")
 
         result = response.json()
+
+        usage = result.get("usageMetadata") or {}
+        if usage:
+            logger.info(
+                f"Gemini tokens: prompt={usage.get('promptTokenCount', '?')}, "
+                f"completion={usage.get('candidatesTokenCount', '?')}"
+            )
+
         try:
-            parts = result["candidates"][0]["content"]["parts"]
+            candidate = result["candidates"][0]
+            # Log when generation stopped for any reason other than a clean finish
+            finish_reason = candidate.get("finishReason")
+            if finish_reason and finish_reason != "STOP":
+                logger.warning(f"Gemini finishReason={finish_reason} (response likely incomplete)")
+
+            parts = candidate["content"]["parts"]
             # Response may have multiple parts (e.g. thought + text).
             # The actual content is in the last part with a "text" key.
             for part in reversed(parts):
@@ -303,6 +317,7 @@ class GeminiVisionProvider(OCRProvider):
         if regions_data is None:
             return []
 
+        raw_region_count = len(regions_data)
         text_regions = []
         for region in regions_data:
             if not _validate_region(region):
@@ -333,10 +348,12 @@ class GeminiVisionProvider(OCRProvider):
                 text=text,
                 rect=rect,
                 confidence=0.9,
-                translated_text=translated if translated else None,
+                translated_text=translated if translated else text,
             ))
 
-        logger.info(f"Gemini Vision: detected {len(text_regions)} text regions")
+        logger.info(
+            f"Gemini Vision: {len(text_regions)}/{raw_region_count} valid regions"
+        )
         for i, r in enumerate(text_regions):
             logger.debug(f"  [{i}] '{r.text}' -> '{r.translated_text}' at {r.rect}")
 
