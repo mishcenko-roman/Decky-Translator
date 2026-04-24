@@ -377,24 +377,24 @@ export class GameTranslatorLogic {
             // Check if this is a network error
             if (error instanceof NetworkError) {
                 const msg = error.message || "No internet connection";
-                this.imageState.updateProcessingStep(msg);
+                this.imageState.updateProcessingStep(msg, true);
                 // Hide overlay after showing the error message
                 setTimeout(() => {
                     this.imageState.hideImage();
                 }, 2500); // 2.5 seconds delay for network error
             } else if (error instanceof ApiKeyError) {
-                this.imageState.updateProcessingStep("Invalid API key");
+                this.imageState.updateProcessingStep("Invalid API key", true);
                 // Hide overlay after showing the error message
                 setTimeout(() => {
                     this.imageState.hideImage();
                 }, 2500); // 2.5 seconds delay for API key error
             } else if (error instanceof ModelNotAvailableError) {
-                this.imageState.updateProcessingStep(error.message);
+                this.imageState.updateProcessingStep(error.message, true);
                 setTimeout(() => {
                     this.imageState.hideImage();
                 }, 3000);
             } else if (error instanceof RateLimitError) {
-                this.imageState.updateProcessingStep(error.message);
+                this.imageState.updateProcessingStep(error.message, true);
                 // Hide overlay after showing the error message
                 setTimeout(() => {
                     this.imageState.hideImage();
