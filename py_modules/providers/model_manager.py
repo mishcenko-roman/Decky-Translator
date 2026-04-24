@@ -36,6 +36,10 @@ NLLB_LANG_MAP = {
     "hi": "hin_Deva",
     "id": "ind_Latn",
     "hr": "hrv_Latn",
+    "cs": "ces_Latn",
+    "hu": "hun_Latn",
+    "sv": "swe_Latn",
+    "da": "dan_Latn",
 }
 
 REQUIRED_MODEL_FILES = ["model.bin", "sentencepiece.bpe.model", "config.json", "shared_vocabulary.txt"]

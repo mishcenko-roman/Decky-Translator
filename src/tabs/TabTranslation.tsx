@@ -58,7 +58,11 @@ const languageOptions = [
     { label: "\ud83c\uddf7\ud83c\uddf4 Romanian", data: "ro" },
     { label: "\ud83c\uddfb\ud83c\uddf3 Vietnamese", data: "vi" },
     { label: "\ud83c\udde7\ud83c\uddec Bulgarian", data: "bg" },
-    { label: "\ud83c\udded\ud83c\uddf7 Croatian", data: "hr" }
+    { label: "\ud83c\udded\ud83c\uddf7 Croatian", data: "hr" },
+    { label: "\ud83c\udde8\ud83c\uddff Czech", data: "cs" },
+    { label: "\ud83c\udded\ud83c\uddfa Hungarian", data: "hu" },
+    { label: "\ud83c\uddf8\ud83c\uddea Swedish", data: "sv" },
+    { label: "\ud83c\udde9\ud83c\uddf0 Danish", data: "da" }
 ];
 
 const selectLanguageOption = { label: "Select language...", data: "" };
@@ -68,6 +72,7 @@ const outputLanguageOptions = languageOptions.filter(lang => lang.data !== "auto
 const rapidocrLanguages = new Set([
     'en', 'zh-CN', 'zh-TW', 'ja', 'ko',
     'de', 'fr', 'es', 'it', 'pt', 'nl', 'pl', 'tr', 'ro', 'vi', 'fi', 'hr',
+    'cs', 'hu', 'sv', 'da',
     'ru', 'uk', 'el', 'th', 'bg'
 ]);
 
