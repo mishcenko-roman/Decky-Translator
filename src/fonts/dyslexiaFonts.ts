@@ -4,6 +4,7 @@ interface DyslexiaFontDef {
     name: string;
     source: 'google' | 'cdn';
     cdnCssUrls?: string[];
+    availableFor: string;
 }
 
 const DYSLEXIA_FONT_DEFS: DyslexiaFontDef[] = [
@@ -15,25 +16,26 @@ const DYSLEXIA_FONT_DEFS: DyslexiaFontDef[] = [
             'https://cdn.jsdelivr.net/npm/@fontsource/opendyslexic@5.2.5/400.css',
             'https://cdn.jsdelivr.net/npm/@fontsource/opendyslexic@5.2.5/700.css',
         ],
+        availableFor: 'Latin languages',
     },
-    { name: 'Lexend', source: 'google' },
-    { name: 'Atkinson Hyperlegible Next', source: 'google' },
-    { name: 'Andika', source: 'google' },
+    { name: 'Lexend', source: 'google', availableFor: 'Latin/Greek languages' },
+    { name: 'Atkinson Hyperlegible Next', source: 'google', availableFor: 'Latin/Greek languages' },
+    { name: 'Andika', source: 'google', availableFor: 'Latin/Cyrillic languages' },
     // Japanese
-    { name: 'BIZ UDGothic', source: 'google' },
-    { name: 'BIZ UDMincho', source: 'google' },
-    { name: 'BIZ UDPGothic', source: 'google' },
+    { name: 'BIZ UDGothic', source: 'google', availableFor: 'Japanese' },
+    { name: 'BIZ UDMincho', source: 'google', availableFor: 'Japanese' },
+    { name: 'BIZ UDPGothic', source: 'google', availableFor: 'Japanese' },
     // Korean
-    { name: 'Nanum Gothic', source: 'google' },
+    { name: 'Nanum Gothic', source: 'google', availableFor: 'Korean' },
     // Chinese
-    { name: 'Noto Sans SC', source: 'google' },
-    { name: 'Noto Sans TC', source: 'google' },
+    { name: 'Noto Sans SC', source: 'google', availableFor: 'Simplified Chinese' },
+    { name: 'Noto Sans TC', source: 'google', availableFor: 'Traditional Chinese' },
     // Thai
-    { name: 'Noto Sans Thai Looped', source: 'google' },
+    { name: 'Noto Sans Thai Looped', source: 'google', availableFor: 'Thai' },
     // Hindi / Devanagari
-    { name: 'Noto Sans Devanagari', source: 'google' },
+    { name: 'Noto Sans Devanagari', source: 'google', availableFor: 'Hindi' },
     // Arabic
-    { name: 'Noto Sans Arabic', source: 'google' },
+    { name: 'Noto Sans Arabic', source: 'google', availableFor: 'Arabic' },
 ];
 
 /**
@@ -67,6 +69,7 @@ const DEFAULT_DYSLEXIA_FONTS = ['OpenDyslexic', 'Lexend', 'Atkinson Hyperlegible
 
 const dyslexiaFontSet = new Set(DYSLEXIA_FONT_DEFS.map(f => f.name));
 const dyslexiaFontMap = new Map(DYSLEXIA_FONT_DEFS.map(f => [f.name, f]));
+const ALL_DYSLEXIA_FONT_NAMES = DYSLEXIA_FONT_DEFS.map(f => f.name);
 
 export function isDyslexiaFont(fontName: string): boolean {
     return dyslexiaFontSet.has(fontName);
@@ -74,6 +77,14 @@ export function isDyslexiaFont(fontName: string): boolean {
 
 export function getDyslexiaFontsForLanguage(targetLanguage: string): string[] {
     return LANGUAGE_DYSLEXIA_FONTS[targetLanguage] ?? DEFAULT_DYSLEXIA_FONTS;
+}
+
+export function getAllDyslexiaFontNames(): string[] {
+    return ALL_DYSLEXIA_FONT_NAMES;
+}
+
+export function getDyslexiaFontAvailableFor(fontName: string): string {
+    return dyslexiaFontMap.get(fontName)?.availableFor ?? '';
 }
 
 // Higher than Google Fonts timeout because CDN fonts may load multiple stylesheets sequentially.

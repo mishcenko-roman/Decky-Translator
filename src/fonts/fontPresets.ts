@@ -1,6 +1,7 @@
 import type { DropdownOption } from "@decky/ui";
 import { createElement, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { isDyslexiaFont, getDyslexiaFontsForLanguage, loadDyslexiaFont, preloadDyslexiaFonts } from "./dyslexiaFonts";
+import { HiLockClosed } from "react-icons/hi2";
+import { isDyslexiaFont, getDyslexiaFontsForLanguage, getAllDyslexiaFontNames, getDyslexiaFontAvailableFor, loadDyslexiaFont, preloadDyslexiaFonts } from "./dyslexiaFonts";
 import { getWebFontsForLanguage, isWebFont, loadGoogleFont, preloadWebFontList } from "./webFonts";
 
 export const DEFAULT_TRANSLATED_FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
@@ -133,20 +134,44 @@ export function useFontOptions(selectedFontFamily: string, targetLanguage: strin
 
     const webFonts = useMemo(() => getWebFontsForLanguage(targetLanguage), [targetLanguage]);
     const dyslexiaFonts = useMemo(() => getDyslexiaFontsForLanguage(targetLanguage), [targetLanguage]);
+    const allDyslexiaFonts = useMemo(() => getAllDyslexiaFontNames(), []);
+    const unavailableDyslexiaFonts = useMemo(() => {
+        const supported = new Set(dyslexiaFonts);
+        return new Set(allDyslexiaFonts.filter(f => !supported.has(f)));
+    }, [allDyslexiaFonts, dyslexiaFonts]);
 
     const fontOptions = useMemo(() => {
         const localSet = new Set(availableFonts);
-        const dyslexiaSet = new Set(dyslexiaFonts);
-        const webOnly = webFonts.filter(f => !localSet.has(f) && !dyslexiaSet.has(f)).sort((a, b) => a.localeCompare(b));
+        const allDyslexiaSet = new Set(allDyslexiaFonts);
+        const webOnly = webFonts.filter(f => !localSet.has(f) && !allDyslexiaSet.has(f)).sort((a, b) => a.localeCompare(b));
+
+        const supportedDyslexiaSet = new Set(dyslexiaFonts);
+        const orderedDyslexiaFonts = [
+            ...dyslexiaFonts,
+            ...allDyslexiaFonts.filter(f => !supportedDyslexiaSet.has(f)),
+        ];
 
         const styledLabel = (text: string, fontFamily: string): ReactNode =>
             createElement('span', { style: { fontFamily: `${quoteFontName(fontFamily)}, sans-serif` } }, text);
+
+        const unavailableLabel = (fontFamily: string): ReactNode =>
+            createElement(
+                'span',
+                { style: { opacity: 0.45, fontSize: '0.85em', fontFamily: `${quoteFontName(fontFamily)}, sans-serif` } },
+                createElement(HiLockClosed, { style: { marginRight: 6, verticalAlign: '-0.125em' } }),
+                fontFamily,
+                createElement(
+                    'span',
+                    { style: { marginLeft: 8, fontStyle: 'italic', fontFamily: 'inherit' } },
+                    `(${getDyslexiaFontAvailableFor(fontFamily)})`,
+                ),
+            );
 
         const options: DropdownOption[] = [
             { label: "Auto (System Default)", data: "" },
         ];
 
-        if (selectedFontFamily && !localSet.has(selectedFontFamily) && !webOnly.includes(selectedFontFamily) && !dyslexiaSet.has(selectedFontFamily)) {
+        if (selectedFontFamily && !localSet.has(selectedFontFamily) && !webOnly.includes(selectedFontFamily) && !allDyslexiaSet.has(selectedFontFamily)) {
             options.push({ label: styledLabel(selectedFontFamily, selectedFontFamily), data: selectedFontFamily });
         }
 
@@ -157,12 +182,13 @@ export function useFontOptions(selectedFontFamily: string, targetLanguage: strin
             });
         }
 
-        if (dyslexiaFonts.length > 0) {
-            options.push({
-                label: "Dyslexia-Friendly",
-                options: dyslexiaFonts.map(f => ({ label: styledLabel(f, f), data: f })),
-            });
-        }
+        options.push({
+            label: "Dyslexia-Friendly",
+            options: orderedDyslexiaFonts.map(f => ({
+                label: unavailableDyslexiaFonts.has(f) ? unavailableLabel(f) : styledLabel(f, f),
+                data: f,
+            })),
+        });
 
         if (webOnly.length > 0) {
             options.push({
@@ -172,7 +198,7 @@ export function useFontOptions(selectedFontFamily: string, targetLanguage: strin
         }
 
         return options;
-    }, [availableFonts, selectedFontFamily, webFonts, dyslexiaFonts]);
+    }, [availableFonts, selectedFontFamily, webFonts, dyslexiaFonts, allDyslexiaFonts, unavailableDyslexiaFonts]);
 
     // Reset font to Auto when target language changes and current font is not in the new list
     const prevLangRef = useRef(targetLanguage);
@@ -201,7 +227,7 @@ export function useFontOptions(selectedFontFamily: string, targetLanguage: strin
             + ' fonts';
     }, [availableFonts, webFonts, dyslexiaFonts]);
 
-    return { availableFonts, webFonts, dyslexiaFonts, fontOptions, fontDescription, preloadWebFonts };
+    return { availableFonts, webFonts, dyslexiaFonts, unavailableDyslexiaFonts, fontOptions, fontDescription, preloadWebFonts };
 }
 
 export function isRemoteFont(fontName: string): boolean {

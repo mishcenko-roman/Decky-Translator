@@ -9,7 +9,7 @@ import {
     Field
 } from "@decky/ui";
 
-import { VFC } from "react";
+import { VFC, useState } from "react";
 import { useSettings } from "../SettingsContext";
 import { InputMode } from "../Input";
 import { useFontOptions, isRemoteFont, loadRemoteFont } from "../fonts";
@@ -65,11 +65,12 @@ interface TabControlsProps {
 
 export const TabControls: VFC<TabControlsProps> = ({ inputDiagnostics }) => {
     const { settings, updateSetting } = useSettings();
-    const { fontOptions, fontDescription, preloadWebFonts } = useFontOptions(
+    const { fontOptions, fontDescription, preloadWebFonts, unavailableDyslexiaFonts } = useFontOptions(
         settings.translatedTextFontFamily,
         settings.targetLanguage,
         () => updateSetting('translatedTextFontFamily', '', 'Text font'),
     );
+    const [fontDropdownKey, setFontDropdownKey] = useState(0);
 
     return (
         <div style={{ marginLeft: "-8px", marginRight: "-8px" }}>
@@ -187,6 +188,7 @@ export const TabControls: VFC<TabControlsProps> = ({ inputDiagnostics }) => {
 
                 <PanelSectionRow>
                     <DropdownItem
+                        key={fontDropdownKey}
                         label="Translated Text Font"
                         description={fontDescription}
                         rgOptions={fontOptions}
@@ -197,6 +199,10 @@ export const TabControls: VFC<TabControlsProps> = ({ inputDiagnostics }) => {
                         }}
                         onChange={(option) => {
                             const fontName = option.data;
+                            if (fontName && unavailableDyslexiaFonts.has(fontName)) {
+                                setFontDropdownKey(k => k + 1);
+                                return;
+                            }
                             if (fontName && isRemoteFont(fontName)) {
                                 const previousFont = settings.translatedTextFontFamily;
                                 updateSetting('translatedTextFontFamily', fontName, 'Text font');
