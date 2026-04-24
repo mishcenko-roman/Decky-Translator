@@ -71,149 +71,183 @@ export const TabMain: VFC<TabMainProps> = ({ logic, overlayVisible, providerStat
                         {/* Provider Status */}
                         <PanelSectionRow>
                             <div style={{ fontSize: '12px', marginTop: '8px' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', marginBottom: settings.ocrProvider === 'ocrspace' && providerStatus?.ocr_usage ? '2px' : '4px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
                                     <BsEye style={{ marginRight: '8px', color: '#aaa' }} />
                                     <span style={{ color: '#888' }}>Text Recognition:</span>
                                     <span style={{ marginLeft: '6px', fontWeight: 'bold' }}>
-                                        {settings.ocrProvider === 'rapidocr' ? 'RapidOCR' :
+                                        {settings.ocrProvider === 'rapidocr' ? 'On-Device' :
                                          settings.ocrProvider === 'ocrspace' ? 'OCR.space' :
                                          settings.ocrProvider === 'gemini_vision' ? 'Gemini Vision' : 'Google Cloud'}
                                     </span>
                                 </div>
-                                {/* Show RapidOCR status */}
                                 {settings.ocrProvider === 'rapidocr' && (
                                     <div style={{ marginLeft: '22px', marginBottom: '6px' }}>
                                         {providerStatus?.rapidocr_available ? (
-                                            <div style={{ color: '#666', fontSize: '10px' }}>
-                                                <div>On-device Text Recognition</div>
-                                                <div>Version:{providerStatus?.rapidocr_info?.version ? ` (v${providerStatus.rapidocr_info.version})` : ''}</div>
-                                            </div>
+                                            <>
+                                                <div style={{ color: '#666', fontSize: '10px' }}>On-device Text Recognition</div>
+                                                <div style={{ color: '#666', fontSize: '10px' }}>Version:{providerStatus?.rapidocr_info?.version ? ` (v${providerStatus.rapidocr_info.version})` : ''}</div>
+                                            </>
                                         ) : (
-                                            <span style={{ color: '#ff6b6b', fontSize: '10px' }}>
+                                            <div style={{ color: '#ff6b6b', fontSize: '10px' }}>
                                                 {providerStatus?.rapidocr_error || 'Not available - RapidOCR not initialized'}
-                                            </span>
+                                            </div>
                                         )}
+                                        <div style={{ color: '#666', fontSize: '10px' }}>No internet needed</div>
                                     </div>
                                 )}
-                                {/* Show Gemini Vision status */}
                                 {settings.ocrProvider === 'gemini_vision' && (
                                     <div style={{ marginLeft: '22px', marginBottom: '6px' }}>
                                         <div style={{ color: settings.geminiApiKey ? '#666' : '#ff6b6b', fontSize: '10px' }}>
                                             {settings.geminiApiKey ? 'API key configured' : 'API key required'}
                                         </div>
+                                        <div style={{ color: '#666', fontSize: '10px' }}>
+                                            Model: {settings.geminiModel.replace(/^gemini-/, '').split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
+                                        </div>
+                                        <div style={{ color: '#666', fontSize: '10px' }}>Requires internet connection</div>
                                     </div>
                                 )}
-                                {/* Show OCR.space usage stats right under text recognition */}
-                                {settings.ocrProvider === 'ocrspace' && providerStatus?.ocr_usage && (
+                                {settings.ocrProvider === 'googlecloud' && (
                                     <div style={{ marginLeft: '22px', marginBottom: '6px' }}>
-                                        {/* Rate limit (10 per 10 minutes) */}
-                                        <div style={{
-                                            display: 'flex',
-                                            justifyContent: 'space-between',
-                                            alignItems: 'center',
-                                            marginBottom: '3px'
-                                        }}>
-                                            <span style={{ color: '#666', fontSize: '10px' }}>
-                                                10 min limit:
-                                            </span>
-                                            <span style={{
-                                                fontSize: '10px',
-                                                color: providerStatus.ocr_usage.rate_remaining <= 2 ? '#ff6b6b' : '#888'
-                                            }}>
-                                                {providerStatus.ocr_usage.rate_remaining}/{providerStatus.ocr_usage.rate_limit}
-                                            </span>
+                                        <div style={{ color: settings.googleApiKey ? '#666' : '#ff6b6b', fontSize: '10px' }}>
+                                            {settings.googleApiKey ? 'API key configured' : 'API key required'}
                                         </div>
-                                        <div style={{
-                                            height: '3px',
-                                            backgroundColor: 'rgba(255,255,255,0.1)',
-                                            borderRadius: '2px',
-                                            overflow: 'hidden',
-                                            marginBottom: '4px'
-                                        }}>
-                                            <div style={{
-                                                height: '100%',
-                                                width: `${(providerStatus.ocr_usage.rate_remaining / providerStatus.ocr_usage.rate_limit) * 100}%`,
-                                                backgroundColor: providerStatus.ocr_usage.rate_remaining <= 2
-                                                    ? '#ff6b6b'
-                                                    : providerStatus.ocr_usage.rate_remaining <= 5
-                                                        ? '#ffa726'
-                                                        : '#4caf50',
-                                                borderRadius: '2px',
-                                                transition: 'width 0.3s ease'
-                                            }} />
-                                        </div>
-                                        {providerStatus.ocr_usage.rate_remaining === 0 && providerStatus.ocr_usage.rate_reset_seconds > 0 && (
-                                            <div style={{ color: '#ff6b6b', fontSize: '10px', marginBottom: '4px' }}>
-                                                Rate limit exceeded - resets in {Math.ceil(providerStatus.ocr_usage.rate_reset_seconds / 60)} min
-                                            </div>
-                                        )}
-
-                                        {/* Daily limit (500 per day) */}
-                                        <div style={{
-                                            display: 'flex',
-                                            justifyContent: 'space-between',
-                                            alignItems: 'center',
-                                            marginBottom: '3px'
-                                        }}>
-                                            <span style={{ color: '#666', fontSize: '10px' }}>
-                                                Daily limit:
-                                            </span>
-                                            <span style={{
-                                                fontSize: '10px',
-                                                color: providerStatus.ocr_usage.remaining < 50 ? '#ff6b6b' : '#888'
-                                            }}>
-                                                {providerStatus.ocr_usage.remaining}/{providerStatus.ocr_usage.limit}
-                                            </span>
-                                        </div>
-                                        <div style={{
-                                            height: '3px',
-                                            backgroundColor: 'rgba(255,255,255,0.1)',
-                                            borderRadius: '2px',
-                                            overflow: 'hidden'
-                                        }}>
-                                            <div style={{
-                                                height: '100%',
-                                                width: `${(providerStatus.ocr_usage.remaining / providerStatus.ocr_usage.limit) * 100}%`,
-                                                backgroundColor: providerStatus.ocr_usage.remaining < 50
-                                                    ? '#ff6b6b'
-                                                    : providerStatus.ocr_usage.remaining < 100
-                                                        ? '#ffa726'
-                                                        : '#4caf50',
-                                                borderRadius: '2px',
-                                                transition: 'width 0.3s ease'
-                                            }} />
-                                        </div>
-                                        {providerStatus.ocr_usage.remaining < 50 && (
-                                            <div style={{ color: '#ff6b6b', fontSize: '10px', marginTop: '2px' }}>
-                                                Low daily requests remaining
-                                            </div>
-                                        )}
+                                        <div style={{ color: '#666', fontSize: '10px' }}>Requires internet connection</div>
                                     </div>
                                 )}
-                                {/* Show Google Cloud status */}
+                                {settings.ocrProvider === 'ocrspace' && (
+                                    <div style={{ marginLeft: '22px', marginBottom: '6px' }}>
+                                        <div style={{ color: '#666', fontSize: '10px', marginBottom: '4px' }}>Free, no API key needed</div>
+                                        {providerStatus?.ocr_usage && (
+                                            <>
+                                                <div style={{
+                                                    display: 'flex',
+                                                    justifyContent: 'space-between',
+                                                    alignItems: 'center',
+                                                    marginBottom: '3px'
+                                                }}>
+                                                    <span style={{ color: '#666', fontSize: '10px' }}>
+                                                        10 min limit:
+                                                    </span>
+                                                    <span style={{
+                                                        fontSize: '10px',
+                                                        color: providerStatus.ocr_usage.rate_remaining <= 2 ? '#ff6b6b' : '#888'
+                                                    }}>
+                                                        {providerStatus.ocr_usage.rate_remaining}/{providerStatus.ocr_usage.rate_limit}
+                                                    </span>
+                                                </div>
+                                                <div style={{
+                                                    height: '3px',
+                                                    backgroundColor: 'rgba(255,255,255,0.1)',
+                                                    borderRadius: '2px',
+                                                    overflow: 'hidden',
+                                                    marginBottom: '4px'
+                                                }}>
+                                                    <div style={{
+                                                        height: '100%',
+                                                        width: `${(providerStatus.ocr_usage.rate_remaining / providerStatus.ocr_usage.rate_limit) * 100}%`,
+                                                        backgroundColor: providerStatus.ocr_usage.rate_remaining <= 2
+                                                            ? '#ff6b6b'
+                                                            : providerStatus.ocr_usage.rate_remaining <= 5
+                                                                ? '#ffa726'
+                                                                : '#4caf50',
+                                                        borderRadius: '2px',
+                                                        transition: 'width 0.3s ease'
+                                                    }} />
+                                                </div>
+                                                {providerStatus.ocr_usage.rate_remaining === 0 && providerStatus.ocr_usage.rate_reset_seconds > 0 && (
+                                                    <div style={{ color: '#ff6b6b', fontSize: '10px', marginBottom: '4px' }}>
+                                                        Rate limit exceeded - resets in {Math.ceil(providerStatus.ocr_usage.rate_reset_seconds / 60)} min
+                                                    </div>
+                                                )}
+
+                                                <div style={{
+                                                    display: 'flex',
+                                                    justifyContent: 'space-between',
+                                                    alignItems: 'center',
+                                                    marginBottom: '3px'
+                                                }}>
+                                                    <span style={{ color: '#666', fontSize: '10px' }}>
+                                                        Daily limit:
+                                                    </span>
+                                                    <span style={{
+                                                        fontSize: '10px',
+                                                        color: providerStatus.ocr_usage.remaining < 50 ? '#ff6b6b' : '#888'
+                                                    }}>
+                                                        {providerStatus.ocr_usage.remaining}/{providerStatus.ocr_usage.limit}
+                                                    </span>
+                                                </div>
+                                                <div style={{
+                                                    height: '3px',
+                                                    backgroundColor: 'rgba(255,255,255,0.1)',
+                                                    borderRadius: '2px',
+                                                    overflow: 'hidden',
+                                                    marginBottom: '4px'
+                                                }}>
+                                                    <div style={{
+                                                        height: '100%',
+                                                        width: `${(providerStatus.ocr_usage.remaining / providerStatus.ocr_usage.limit) * 100}%`,
+                                                        backgroundColor: providerStatus.ocr_usage.remaining < 50
+                                                            ? '#ff6b6b'
+                                                            : providerStatus.ocr_usage.remaining < 100
+                                                                ? '#ffa726'
+                                                                : '#4caf50',
+                                                        borderRadius: '2px',
+                                                        transition: 'width 0.3s ease'
+                                                    }} />
+                                                </div>
+                                                {providerStatus.ocr_usage.remaining < 50 && (
+                                                    <div style={{ color: '#ff6b6b', fontSize: '10px', marginBottom: '4px' }}>
+                                                        Low daily requests remaining
+                                                    </div>
+                                                )}
+                                            </>
+                                        )}
+                                        <div style={{ color: '#666', fontSize: '10px' }}>Requires internet connection</div>
+                                    </div>
+                                )}
                                 <div style={{ display: 'flex', alignItems: 'center', marginBottom: '2px' }}>
                                     <BsTranslate style={{ marginRight: '8px', color: '#aaa' }} />
                                     <span style={{ color: '#888' }}>Translation:</span>
                                     <span style={{ marginLeft: '6px', fontWeight: 'bold' }}>
                                         {settings.ocrProvider === 'gemini_vision' ? 'Gemini Vision' :
                                          settings.translationProvider === 'googlecloud' ? 'Google Cloud' :
-                                         settings.translationProvider === 'ct2' ? 'Offline (NLLB)' : 'Google Translate'}
+                                         settings.translationProvider === 'ct2' ? 'On-Device' : 'Google Translate'}
                                     </span>
                                 </div>
                                 <div style={{ marginLeft: '22px', marginBottom: '6px' }}>
                                     {settings.ocrProvider === 'gemini_vision' && (
-                                        <div style={{ color: settings.geminiApiKey ? '#666' : '#ff6b6b', fontSize: '10px' }}>
-                                            {settings.geminiApiKey ? 'API key configured' : 'API key required'}
-                                        </div>
+                                        <>
+                                            <div style={{ color: settings.geminiApiKey ? '#666' : '#ff6b6b', fontSize: '10px' }}>
+                                                {settings.geminiApiKey ? 'API key configured' : 'API key required'}
+                                            </div>
+                                            <div style={{ color: '#666', fontSize: '10px' }}>
+                                                Model: {settings.geminiModel.replace(/^gemini-/, '').split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
+                                            </div>
+                                            <div style={{ color: '#666', fontSize: '10px' }}>Requires internet connection</div>
+                                        </>
+                                    )}
+                                    {settings.ocrProvider !== 'gemini_vision' && settings.translationProvider === 'freegoogle' && (
+                                        <>
+                                            <div style={{ color: '#666', fontSize: '10px' }}>No API key needed</div>
+                                            <div style={{ color: '#666', fontSize: '10px' }}>Requires internet connection</div>
+                                        </>
                                     )}
                                     {settings.ocrProvider !== 'gemini_vision' && settings.translationProvider === 'googlecloud' && (
-                                        <div style={{ color: settings.googleApiKey ? '#666' : '#ff6b6b', fontSize: '10px' }}>
-                                            {settings.googleApiKey ? 'API key configured' : 'API key required'}
-                                        </div>
+                                        <>
+                                            <div style={{ color: settings.googleApiKey ? '#666' : '#ff6b6b', fontSize: '10px' }}>
+                                                {settings.googleApiKey ? 'API key configured' : 'API key required'}
+                                            </div>
+                                            <div style={{ color: '#666', fontSize: '10px' }}>Requires internet connection</div>
+                                        </>
                                     )}
-                                    <div style={{ color: '#666', fontSize: '10px' }}>
-                                        {settings.translationProvider === 'ct2' ? 'No internet needed' : 'Requires internet connection'}
-                                    </div>
+                                    {settings.ocrProvider !== 'gemini_vision' && settings.translationProvider === 'ct2' && (
+                                        <>
+                                            <div style={{ color: providerStatus?.nllb_downloaded ? '#666' : '#ff6b6b', fontSize: '10px' }}>
+                                                {providerStatus?.nllb_downloaded ? 'Installed model: NLLB-200 1.3B' : 'Installed model: None'}
+                                            </div>
+                                            <div style={{ color: '#666', fontSize: '10px' }}>No internet needed</div>
+                                        </>
+                                    )}
                                 </div>
                             </div>
                         </PanelSectionRow>

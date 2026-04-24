@@ -77,13 +77,7 @@ const GameTranslator: VFC<{ logic: GameTranslatorLogic }> = ({ logic }) => {
         };
     }, [logic, settings.enabled]);
 
-    // Fetch provider status (including usage stats) when using free providers
     useEffect(() => {
-        if (!settings.useFreeProviders) {
-            setProviderStatus(null);
-            return;
-        }
-
         const fetchProviderStatus = async () => {
             try {
                 const result = await call<[], any>('get_provider_status');
@@ -96,13 +90,12 @@ const GameTranslator: VFC<{ logic: GameTranslatorLogic }> = ({ logic }) => {
         };
 
         fetchProviderStatus();
-        // Refresh every 5 seconds for responsive updates
         const intervalId = setInterval(fetchProviderStatus, 5000);
 
         return () => {
             clearInterval(intervalId);
         };
-    }, [settings.useFreeProviders]);
+    }, []);
 
     // Refresh diagnostics while debug mode is on
     useEffect(() => {

@@ -404,6 +404,8 @@ class ProviderManager:
         status["rapidocr_info"] = rapidocr.get_rapidocr_info()
         status["rapidocr_error"] = rapidocr.get_init_error()
 
+        status["nllb_downloaded"] = self.is_nllb_model_downloaded()
+
         return status
 
     # -- NLLB model management --
