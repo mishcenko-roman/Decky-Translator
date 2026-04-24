@@ -10,7 +10,6 @@ import {
     showModal,
     ModalRoot,
     DialogButton,
-    ButtonItem,
     TextField,
     Field,
     Focusable
@@ -19,7 +18,7 @@ import {
 import { VFC, useState, useEffect, useRef, useCallback } from "react";
 import { call } from "@decky/api";
 import { useSettings } from "../SettingsContext";
-import { HiKey, HiLockClosed } from "react-icons/hi2";
+import { HiKey, HiLockClosed, HiArrowDownTray, HiTrash, HiXMark } from "react-icons/hi2";
 import { BsArrowRepeat, BsStars } from "react-icons/bs";
 
 // @ts-ignore
@@ -250,109 +249,97 @@ const CT2ModelManager: VFC = () => {
     };
 
     const isAutoDetect = settings.inputLanguage === 'auto' || settings.inputLanguage === '';
+    const isDownloading = modelStatus.downloading;
+    const isDownloaded = modelStatus.downloaded;
 
-    const statusDot = (
-        <div style={{
-            width: "8px",
-            height: "8px",
-            borderRadius: "50%",
-            backgroundColor: modelStatus.downloaded ? "#4caf50" : "#ff6b6b",
-            flexShrink: 0,
-        }} />
-    );
-
-    const sizeHint = modelStatus.approx_size_mb
-        ? `~${(modelStatus.approx_size_mb / 1024).toFixed(1)} GB`
-        : '';
+    const progressPct = Math.round((modelStatus.progress || 0) * 100);
+    const statusColor = isDownloading ? "#ffa726" : isDownloaded ? "#4caf50" : "#ff6b6b";
+    const installedSize = modelStatus.size ? ` (${formatBytes(modelStatus.size)})` : '';
+    const statusText = isDownloading
+        ? `downloading ${progressPct}%`
+        : isDownloaded
+            ? `ready${installedSize}`
+            : "not installed";
+    const ActionIcon = isDownloading ? HiXMark : isDownloaded ? HiTrash : HiArrowDownTray;
+    const onActionClick = isDownloading ? handleCancel : isDownloaded ? handleDelete : handleDownload;
 
     return (
         <>
-            {isAutoDetect && (
+            <PanelSectionRow>
+                <Focusable style={{
+                    display: "flex",
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: "12px",
+                    padding: "8px 0px",
+                    width: "100%",
+                }}>
+                    <div style={{ flex: 1, minWidth: 0, paddingLeft: '3px' }}>
+                        <div>NLLB-200 1.3B</div>
+                        <div style={{
+                            fontSize: "11px",
+                            color: "#888",
+                            fontWeight: "normal",
+                            marginTop: "2px",
+                            whiteSpace: "nowrap",
+                        }}>
+                            offline language model
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "4px" }}>
+                            <div style={{
+                                width: "8px",
+                                height: "8px",
+                                borderRadius: "50%",
+                                backgroundColor: statusColor,
+                                flexShrink: 0,
+                            }} />
+                            <span style={{ fontSize: "11px", color: statusColor, fontWeight: "normal" }}>
+                                {statusText}
+                            </span>
+                        </div>
+                        {isDownloading && (
+                            <div style={{
+                                marginTop: "4px",
+                                height: "3px",
+                                backgroundColor: "rgba(255,255,255,0.1)",
+                                borderRadius: "2px",
+                                overflow: "hidden",
+                            }}>
+                                <div style={{
+                                    width: `${progressPct}%`,
+                                    height: "100%",
+                                    backgroundColor: statusColor,
+                                    borderRadius: "2px",
+                                    transition: "width 0.3s ease",
+                                }} />
+                            </div>
+                        )}
+                    </div>
+                    <DialogButton
+                        onClick={onActionClick}
+                        style={{ minWidth: "40px", width: "40px", padding: "10px 0", flexShrink: 0 }}
+                    >
+                        <ActionIcon />
+                    </DialogButton>
+                </Focusable>
+            </PanelSectionRow>
+
+            {modelStatus.error && (
                 <PanelSectionRow>
                     <Field focusable={true} childrenContainerWidth="max">
-                        <div style={{ color: "#ffa726", fontSize: "12px", lineHeight: "1.5" }}>
-                            Offline translation needs a specific source language. Select one in the Languages section above.
+                        <div style={{ color: "#ff6b6b", fontSize: "11px" }}>
+                            {modelStatus.error}
                         </div>
                     </Field>
                 </PanelSectionRow>
             )}
 
-            {/* Not downloaded, not downloading */}
-            {!modelStatus.downloaded && !modelStatus.downloading && (
-                <PanelSectionRow>
-                    <ButtonItem
-                        layout="below"
-                        icon={statusDot}
-                        label="Model not installed"
-                        description={`Download required to use offline translation${sizeHint ? ` (${sizeHint})` : ''}`}
-                        onClick={handleDownload}
-                    >
-                        Download model
-                    </ButtonItem>
-                </PanelSectionRow>
-            )}
-
-            {/* Downloading */}
-            {modelStatus.downloading && (
-                <>
-                    <PanelSectionRow>
-                        <Field
-                            label="Downloading model..."
-                            icon={statusDot}
-                            focusable={false}
-                            childrenContainerWidth="fixed"
-                        >
-                            <span style={{ color: "#888", fontSize: "12px" }}>
-                                {Math.round((modelStatus.progress || 0) * 100)}%
-                            </span>
-                        </Field>
-                    </PanelSectionRow>
-                    <PanelSectionRow>
-                        <Field focusable={false} childrenContainerWidth="max">
-                            <div style={{
-                                height: "6px",
-                                backgroundColor: "rgba(255,255,255,0.1)",
-                                borderRadius: "3px",
-                                overflow: "hidden",
-                            }}>
-                                <div style={{
-                                    width: `${(modelStatus.progress || 0) * 100}%`,
-                                    height: "100%",
-                                    backgroundColor: "#4caf50",
-                                    borderRadius: "3px",
-                                    transition: "width 0.3s ease",
-                                }} />
-                            </div>
-                        </Field>
-                    </PanelSectionRow>
-                    <PanelSectionRow>
-                        <ButtonItem layout="below" onClick={handleCancel}>
-                            Cancel download
-                        </ButtonItem>
-                    </PanelSectionRow>
-                </>
-            )}
-
-            {/* Downloaded */}
-            {modelStatus.downloaded && !modelStatus.downloading && (
-                <PanelSectionRow>
-                    <ButtonItem
-                        layout="below"
-                        icon={statusDot}
-                        label="Model installed - ready to use"
-                        description={formatBytes(modelStatus.size)}
-                        onClick={handleDelete}
-                    >
-                        Delete model
-                    </ButtonItem>
-                </PanelSectionRow>
-            )}
-
-            {modelStatus.error && (
+            {isAutoDetect && (
                 <PanelSectionRow>
                     <Field focusable={true} childrenContainerWidth="max">
-                        <div style={{ color: "#ff6b6b", fontSize: "12px" }}>
-                            Download failed: {modelStatus.error}
+                        <div style={{ color: "#ffa726", fontSize: "12px", lineHeight: "1.5" }}>
+                            Offline translation needs a specific source language. Select one in the Languages section above.
                         </div>
                     </Field>
                 </PanelSectionRow>
@@ -758,6 +745,11 @@ export const TabTranslation: VFC = () => {
                         )}
                     </Field>
                 </PanelSectionRow>
+
+                {settings.ocrProvider !== 'gemini_vision' && settings.translationProvider === 'ct2' && (
+                    <CT2ModelManager />
+                )}
+
                 <PanelSectionRow>
                     <Field
                         focusable={true}
@@ -807,21 +799,17 @@ export const TabTranslation: VFC = () => {
                                         <span style={{ fontWeight: "bold", color: "#dcdedf" }}>On-Device (NLLB)</span>
                                     </div>
                                     <ProviderRating quality={1} speed={1} />
-                                    <div>- Offline translation, no internet needed</div>
+                                    <div>- Offline translation</div>
+                                    <div>- Privacy-friendly</div>
                                     <div>- One-time ~1.4 GB download required</div>
                                     <div>- Single model covers most languages</div>
-                                    <div>- Auto-detect not supported, need to specify source language</div>
+                                    <div>- Language auto-detect not supported</div>
                                     <div>- Experimental support</div>
                                 </>
                             )}
                         </div>
                     </Field>
                 </PanelSectionRow>
-
-                {/* CT2 model management */}
-                {settings.ocrProvider !== 'gemini_vision' && settings.translationProvider === 'ct2' && (
-                    <CT2ModelManager />
-                )}
 
                 {/* Invisible spacer to help with scroll when focusing last element */}
                 <PanelSectionRow>
