@@ -789,7 +789,7 @@ export const TabTranslation: VFC = () => {
                                     )}
                                 </>
                             )}
-                            {settings.translationProvider === 'ct2' && (
+                            {settings.ocrProvider !== 'gemini_vision' && settings.translationProvider === 'ct2' && (
                                 <>
                                     <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
                                         <img src={steamdeckLogo} alt="" style={{ height: "18px" }} />
@@ -808,7 +808,7 @@ export const TabTranslation: VFC = () => {
                 </PanelSectionRow>
 
                 {/* CT2 model management */}
-                {settings.translationProvider === 'ct2' && (
+                {settings.ocrProvider !== 'gemini_vision' && settings.translationProvider === 'ct2' && (
                     <CT2ModelManager />
                 )}
 
