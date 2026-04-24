@@ -1572,8 +1572,8 @@ class Plugin:
                 provider = self._provider_manager.get_translation_provider()
                 if provider and not provider.is_available(input_lang, target_lang):
                     if input_lang == "auto":
-                        return {"error": "model_not_available", "message": "Offline translation requires a specific source language. Select one in Translation settings."}
-                    return {"error": "model_not_available", "message": "Translation model not downloaded. Download it in Translation settings."}
+                        return {"error": "model_not_available", "message": "Offline translation requires a specific source language. Select one in plugin settings"}
+                    return {"error": "model_not_available", "message": "Offline model not found. Download it in plugin settings"}
 
             # Only translate regions that don't already have translatedText
             needs_translation = [
