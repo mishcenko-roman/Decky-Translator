@@ -73,7 +73,21 @@ export const TabControls: VFC<TabControlsProps> = ({ inputDiagnostics }) => {
     const [fontDropdownKey, setFontDropdownKey] = useState(0);
 
     return (
-        <div style={{ marginLeft: "-8px", marginRight: "-8px" }}>
+        <div className="dt-fieldfix" style={{ marginLeft: "-8px", marginRight: "-8px" }}>
+            <style>{`
+                .dt-fieldfix *:has(> * > [role="combobox"]),
+                .dt-fieldfix *:has(> * > * > [role="combobox"]),
+                .dt-fieldfix *:has(> * > [role="switch"]),
+                .dt-fieldfix *:has(> * > * > [role="switch"]),
+                .dt-fieldfix *:has(> * > [role="slider"]),
+                .dt-fieldfix *:has(> * > * > [role="slider"]) {
+                    width: 265px !important;
+                    min-width: 0 !important;
+                }
+                .dt-fieldfix *:has(> * > * > .dt-debug-panel) {
+                    column-gap: 0 !important;
+                }
+            `}</style>
             <PanelSection title="Control">
                 <PanelSectionRow>
                     <DropdownItem
@@ -287,7 +301,7 @@ export const TabControls: VFC<TabControlsProps> = ({ inputDiagnostics }) => {
                             focusable={true}
                             childrenContainerWidth="max"
                         >
-                            <div style={{
+                            <div className="dt-debug-panel" style={{
                                 backgroundColor: 'rgba(0,0,0,0.4)',
                                 padding: '12px',
                                 borderRadius: '6px',

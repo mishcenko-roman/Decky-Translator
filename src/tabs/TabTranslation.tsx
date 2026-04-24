@@ -408,7 +408,18 @@ export const TabTranslation: VFC = () => {
     }, [settings.initialized, settings.translationProvider]);
 
     return (
-        <div style={{ marginLeft: "-8px", marginRight: "-8px", paddingBottom: "40px" }}>
+        <div className="dt-fieldfix" style={{ marginLeft: "-8px", marginRight: "-8px", paddingBottom: "40px" }}>
+            <style>{`
+                .dt-fieldfix *:has(> * > [role="combobox"]),
+                .dt-fieldfix *:has(> * > * > [role="combobox"]),
+                .dt-fieldfix *:has(> * > [role="switch"]),
+                .dt-fieldfix *:has(> * > * > [role="switch"]),
+                .dt-fieldfix *:has(> * > [role="slider"]),
+                .dt-fieldfix *:has(> * > * > [role="slider"]) {
+                    width: 265px !important;
+                    min-width: 0 !important;
+                }
+            `}</style>
             <PanelSection title="Languages">
                 <PanelSectionRow>
                     <DropdownItem
