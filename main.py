@@ -902,6 +902,7 @@ class Plugin:
     _rapidocr_box_thresh: float = 0.5  # RapidOCR detection box threshold (0.0-1.0)
     _rapidocr_unclip_ratio: float = 1.6  # RapidOCR box expansion ratio (1.0-3.0)
     _rapidocr_persistent_mode: bool = False  # Keep RapidOCR worker alive between requests
+    _chromescreenai_persistent_mode: bool = False  # Keep Chrome Screen AI worker alive between requests
     _pause_game_on_overlay: bool = False  # Default to not pausing game on overlay
     _quick_toggle_enabled: bool = False  # Default to disabled for quick toggle
 
@@ -1006,6 +1007,16 @@ class Plugin:
                     )
                     if not plugin_enabled and not self._rapidocr_persistent_mode:
                         self._provider_manager.stop_rapidocr_worker()
+            elif key == "chromescreenai_persistent_mode":
+                self._chromescreenai_persistent_mode = bool(value)
+                if self._provider_manager:
+                    plugin_enabled = self._settings.get_setting("enabled", True)
+                    self._provider_manager.set_chromescreenai_persistent_mode(
+                        self._chromescreenai_persistent_mode,
+                        apply_to_provider=plugin_enabled,
+                    )
+                    if not plugin_enabled and not self._chromescreenai_persistent_mode:
+                        self._provider_manager.stop_chromescreenai_worker()
             elif key == "pause_game_on_overlay":
                 self._pause_game_on_overlay = value
             elif key == "quick_toggle_enabled":
@@ -1059,6 +1070,10 @@ class Plugin:
                         self._provider_manager.stop_rapidocr_worker()
                     elif plugin_enabled:
                         self._provider_manager.resume_rapidocr_worker()
+                    if value != "chromescreenai":
+                        self._provider_manager.stop_chromescreenai_worker()
+                    elif plugin_enabled:
+                        self._provider_manager.resume_chromescreenai_worker()
             elif key == "translation_provider":
                 self._translation_provider = value
                 # Update provider manager configuration
@@ -1101,6 +1116,7 @@ class Plugin:
                 "rapidocr_box_thresh": self._settings.get_setting("rapidocr_box_thresh", 0.5),
                 "rapidocr_unclip_ratio": self._settings.get_setting("rapidocr_unclip_ratio", 1.6),
                 "rapidocr_persistent_mode": self._settings.get_setting("rapidocr_persistent_mode", False),
+                "chromescreenai_persistent_mode": self._settings.get_setting("chromescreenai_persistent_mode", False),
                 "pause_game_on_overlay": self._settings.get_setting("pause_game_on_overlay", False),
                 "quick_toggle_enabled": self._settings.get_setting("quick_toggle_enabled", False),
                 "debug_mode": self._settings.get_setting("debug_mode", False),
@@ -1493,6 +1509,9 @@ class Plugin:
                 logger.error("Provider manager not initialized")
                 return []
 
+            if self._ocr_provider == "chromescreenai" and not self._provider_manager.is_chromescreenai_downloaded():
+                return {"error": "model_not_available", "message": "Chrome Screen AI engine not downloaded.\nDownload it in plugin settings"}
+
             # If using Gemini Vision, set the target language before OCR
             # so it can translate in the same API call
             if self._ocr_provider == "gemini_vision":
@@ -1802,6 +1821,55 @@ class Plugin:
             logger.error(f"Error clearing NLLB download error: {e}")
             return False
 
+    # -- Chrome Screen AI download API --
+
+    async def get_chromescreenai_status(self):
+        try:
+            if not self._provider_manager:
+                return {"downloaded": False, "size": 0, "approx_size_mb": 120,
+                        "downloading": False, "progress": 0, "error": None}
+            return self._provider_manager.get_chromescreenai_status()
+        except Exception as e:
+            logger.error(f"Error getting Chrome Screen AI status: {e}")
+            return {"downloaded": False, "size": 0, "approx_size_mb": 120,
+                    "downloading": False, "progress": 0, "error": str(e)}
+
+    async def download_chromescreenai(self):
+        try:
+            if not self._provider_manager:
+                return False
+            return self._provider_manager.download_chromescreenai()
+        except Exception as e:
+            logger.error(f"Error starting Chrome Screen AI download: {e}")
+            return False
+
+    async def cancel_chromescreenai_download(self):
+        try:
+            if self._provider_manager:
+                self._provider_manager.cancel_chromescreenai_download()
+            return True
+        except Exception as e:
+            logger.error(f"Error cancelling Chrome Screen AI download: {e}")
+            return False
+
+    async def clear_chromescreenai_error(self):
+        try:
+            if self._provider_manager:
+                self._provider_manager.clear_chromescreenai_error()
+            return True
+        except Exception as e:
+            logger.error(f"Error clearing Chrome Screen AI error: {e}")
+            return False
+
+    async def delete_chromescreenai(self):
+        try:
+            if not self._provider_manager:
+                return False
+            return self._provider_manager.delete_chromescreenai()
+        except Exception as e:
+            logger.error(f"Error deleting Chrome Screen AI files: {e}")
+            return False
+
     async def _main(self):
         logger.info("Plugin initialization started")
         try:
@@ -1863,6 +1931,10 @@ class Plugin:
             ct2_models_dir = os.path.join(settingsDir, "decky-translator", "models", "nllb")
             os.makedirs(ct2_models_dir, exist_ok=True)
 
+            # Same parent as NLLB so both share the plugin uninstall lifecycle.
+            screenai_models_dir = os.path.join(settingsDir, "decky-translator", "models")
+            os.makedirs(screenai_models_dir, exist_ok=True)
+
             # Initialize provider manager
             self._provider_manager = ProviderManager()
             self._provider_manager.configure(
@@ -1871,7 +1943,8 @@ class Plugin:
                 gemini_api_key=gemini_api_key,
                 ocr_provider=self._ocr_provider,
                 translation_provider=self._translation_provider,
-                ct2_models_dir=ct2_models_dir
+                ct2_models_dir=ct2_models_dir,
+                screenai_models_dir=screenai_models_dir,
             )
 
             # Load and apply RapidOCR-specific settings
@@ -1882,6 +1955,9 @@ class Plugin:
             self._rapidocr_persistent_mode = bool(
                 load_setting("rapidocr_persistent_mode", self._rapidocr_persistent_mode)
             )
+            self._chromescreenai_persistent_mode = bool(
+                load_setting("chromescreenai_persistent_mode", self._chromescreenai_persistent_mode)
+            )
             self._provider_manager.set_rapidocr_confidence(self._rapidocr_confidence)
             self._provider_manager.set_rapidocr_box_thresh(self._rapidocr_box_thresh)
             self._provider_manager.set_rapidocr_unclip_ratio(self._rapidocr_unclip_ratio)
@@ -1891,6 +1967,11 @@ class Plugin:
             self._provider_manager.set_rapidocr_persistent_mode(
                 self._rapidocr_persistent_mode,
                 apply_to_provider=plugin_enabled_at_boot,
+            )
+            self._provider_manager.set_chromescreenai_persistent_mode(
+                self._chromescreenai_persistent_mode,
+                apply_to_provider=plugin_enabled_at_boot
+                                  and self._ocr_provider == "chromescreenai",
             )
 
             # Apply debug_mode log level

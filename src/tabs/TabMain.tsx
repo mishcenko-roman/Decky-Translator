@@ -75,7 +75,8 @@ export const TabMain: VFC<TabMainProps> = ({ logic, overlayVisible, providerStat
                                     <BsEye style={{ marginRight: '8px', color: '#aaa' }} />
                                     <span style={{ color: '#888' }}>Text Recognition:</span>
                                     <span style={{ marginLeft: '6px', fontWeight: 'bold' }}>
-                                        {settings.ocrProvider === 'rapidocr' ? 'On-Device' :
+                                        {settings.ocrProvider === 'chromescreenai' ? 'On-Device' :
+                                         settings.ocrProvider === 'rapidocr' ? 'On-Device' :
                                          settings.ocrProvider === 'ocrspace' ? 'OCR.space' :
                                          settings.ocrProvider === 'gemini_vision' ? 'Gemini Vision' : 'Google Cloud'}
                                     </span>
@@ -92,6 +93,14 @@ export const TabMain: VFC<TabMainProps> = ({ logic, overlayVisible, providerStat
                                                 {providerStatus?.rapidocr_error || 'Not available - RapidOCR not initialized'}
                                             </div>
                                         )}
+                                        <div style={{ color: '#666', fontSize: '10px' }}>No internet needed</div>
+                                    </div>
+                                )}
+                                {settings.ocrProvider === 'chromescreenai' && (
+                                    <div style={{ marginLeft: '22px', marginBottom: '6px' }}>
+                                        <div style={{ color: providerStatus?.chromescreenai_downloaded ? '#666' : '#ff6b6b', fontSize: '10px' }}>
+                                            {providerStatus?.chromescreenai_downloaded ? 'Chrome Screen AI engine ready' : 'Engine not downloaded'}
+                                        </div>
                                         <div style={{ color: '#666', fontSize: '10px' }}>No internet needed</div>
                                     </div>
                                 )}

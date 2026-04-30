@@ -18,9 +18,11 @@ from .google_translate import GoogleTranslateProvider
 from .ocrspace import OCRSpaceProvider
 from .free_translate import FreeTranslateProvider
 from .rapidocr_provider import RapidOCRProvider
+from .chromescreenai_provider import ChromeScreenAIProvider
 from .gemini_vision import GeminiVisionProvider
 from .ct2_translate import CT2TranslateProvider
 from .model_manager import ModelManager
+from .screenai_downloader import ScreenAIDownloader
 
 logger = logging.getLogger(__name__)
 
@@ -38,9 +40,11 @@ __all__ = [
     'OCRSpaceProvider',
     'FreeTranslateProvider',
     'RapidOCRProvider',
+    'ChromeScreenAIProvider',
     'GeminiVisionProvider',
     'CT2TranslateProvider',
     'ModelManager',
+    'ScreenAIDownloader',
     'ProviderManager',
 ]
 
@@ -66,10 +70,14 @@ class ProviderManager:
         self._rapidocr_box_thresh = 0.5  # Default RapidOCR box detection threshold (0.0-1.0)
         self._rapidocr_unclip_ratio = 1.6  # Default RapidOCR box expansion ratio (1.0-3.0)
         self._rapidocr_persistent_mode = False  # Keep worker alive between requests
+        self._chromescreenai_persistent_mode = False  # Same for Chrome Screen AI
 
         # CT2 translation
         self._ct2_models_dir = None
         self._model_manager = None
+
+        # Created on first configure() that supplies screenai_models_dir.
+        self._screenai_downloader: Optional[ScreenAIDownloader] = None
 
         logger.debug("ProviderManager initialized")
 
@@ -80,7 +88,8 @@ class ProviderManager:
         gemini_api_key: str = "",
         ocr_provider: str = "",
         translation_provider: str = "",
-        ct2_models_dir: str = ""
+        ct2_models_dir: str = "",
+        screenai_models_dir: str = "",
     ) -> None:
         """
         Configure provider preferences.
@@ -98,6 +107,8 @@ class ProviderManager:
             self._ct2_models_dir = ct2_models_dir
             if not self._model_manager:
                 self._model_manager = ModelManager(ct2_models_dir)
+        if screenai_models_dir and not self._screenai_downloader:
+            self._screenai_downloader = ScreenAIDownloader(screenai_models_dir)
         self._google_api_key = google_api_key
         self._gemini_api_key = gemini_api_key
 
@@ -227,6 +238,33 @@ class ProviderManager:
         if rapidocr:
             rapidocr.set_persistent_mode(True)
 
+    def set_chromescreenai_persistent_mode(
+        self, enabled: bool, apply_to_provider: bool = True
+    ) -> None:
+        self._chromescreenai_persistent_mode = bool(enabled)
+        if not apply_to_provider:
+            return
+        if self._chromescreenai_persistent_mode and self._ocr_provider_preference == "chromescreenai":
+            provider = self.get_ocr_provider(ProviderType.CHROME_SCREEN_AI)
+        else:
+            provider = self._ocr_providers.get(ProviderType.CHROME_SCREEN_AI)
+        if provider:
+            provider.set_persistent_mode(self._chromescreenai_persistent_mode)
+
+    def stop_chromescreenai_worker(self) -> None:
+        provider = self._ocr_providers.get(ProviderType.CHROME_SCREEN_AI)
+        if provider:
+            provider.stop_worker()
+
+    def resume_chromescreenai_worker(self) -> None:
+        if not self._chromescreenai_persistent_mode:
+            return
+        if self._ocr_provider_preference != "chromescreenai":
+            return
+        provider = self.get_ocr_provider(ProviderType.CHROME_SCREEN_AI)
+        if provider:
+            provider.set_persistent_mode(True)
+
     def get_ocr_provider(
         self,
         provider_type: Optional[ProviderType] = None
@@ -248,6 +286,8 @@ class ProviderManager:
                 provider_type = ProviderType.OCR_SPACE
             elif self._ocr_provider_preference == "gemini_vision":
                 provider_type = ProviderType.GEMINI_VISION
+            elif self._ocr_provider_preference == "chromescreenai":
+                provider_type = ProviderType.CHROME_SCREEN_AI
             else:  # "googlecloud"
                 provider_type = ProviderType.GOOGLE
 
@@ -273,6 +313,12 @@ class ProviderManager:
                     model=self._gemini_model,
                 )
                 provider.set_target_language(self._gemini_target_language)
+                self._ocr_providers[provider_type] = provider
+            elif provider_type == ProviderType.CHROME_SCREEN_AI:
+                model_dir = self._screenai_downloader.get_resources_dir() if self._screenai_downloader else ""
+                provider = ChromeScreenAIProvider(model_dir=model_dir)
+                if self._chromescreenai_persistent_mode:
+                    provider.set_persistent_mode(True)
                 self._ocr_providers[provider_type] = provider
 
         return self._ocr_providers.get(provider_type)
@@ -405,6 +451,7 @@ class ProviderManager:
         status["rapidocr_error"] = rapidocr.get_init_error()
 
         status["nllb_downloaded"] = self.is_nllb_model_downloaded()
+        status["chromescreenai_downloaded"] = self.is_chromescreenai_downloaded()
 
         return status
 
@@ -450,6 +497,44 @@ class ProviderManager:
         if self._model_manager:
             self._model_manager.clear_download_error()
 
+    # -- Chrome Screen AI download management --
+
+    def is_chromescreenai_downloaded(self) -> bool:
+        if self._screenai_downloader:
+            return self._screenai_downloader.is_installed()
+        return False
+
+    def get_chromescreenai_status(self) -> dict:
+        if not self._screenai_downloader:
+            return {
+                "downloaded": False, "size": 0, "approx_size_mb": 120,
+                "downloading": False, "progress": 0, "error": None,
+            }
+        return self._screenai_downloader.get_status()
+
+    def download_chromescreenai(self) -> bool:
+        if self._screenai_downloader:
+            return self._screenai_downloader.start_download()
+        return False
+
+    def cancel_chromescreenai_download(self) -> None:
+        if self._screenai_downloader:
+            self._screenai_downloader.cancel_download()
+
+    def clear_chromescreenai_error(self) -> None:
+        if self._screenai_downloader:
+            self._screenai_downloader.clear_error()
+
+    def delete_chromescreenai(self) -> bool:
+        if not self._screenai_downloader:
+            return False
+        provider = self._ocr_providers.get(ProviderType.CHROME_SCREEN_AI)
+        if provider and hasattr(provider, 'stop_worker'):
+            provider.stop_worker()
+        # Drop the cached provider so it re-checks availability after delete.
+        self._ocr_providers.pop(ProviderType.CHROME_SCREEN_AI, None)
+        return self._screenai_downloader.delete()
+
     def shutdown(self):
         ct2 = self._translation_providers.get(ProviderType.CT2)
         if ct2 and hasattr(ct2, 'shutdown'):
@@ -457,3 +542,6 @@ class ProviderManager:
         rapidocr = self._ocr_providers.get(ProviderType.RAPIDOCR)
         if rapidocr and hasattr(rapidocr, 'stop_worker'):
             rapidocr.stop_worker()
+        screenai = self._ocr_providers.get(ProviderType.CHROME_SCREEN_AI)
+        if screenai and hasattr(screenai, 'stop_worker'):
+            screenai.stop_worker()

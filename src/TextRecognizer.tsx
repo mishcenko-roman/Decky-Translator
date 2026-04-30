@@ -730,6 +730,9 @@ export class TextRecognizer {
                     if (errorResponse.error === 'rate_limit_error') {
                         throw new RateLimitError(errorResponse.message);
                     }
+                    if (errorResponse.error === 'model_not_available') {
+                        throw new ModelNotAvailableError(errorResponse.message);
+                    }
                     logger.error('TextRecognizer', `Error from backend: ${errorResponse.error} - ${errorResponse.message}`);
                     return [];
                 }
@@ -746,7 +749,7 @@ export class TextRecognizer {
             logger.error('TextRecognizer', 'Failed to recognize text (file-based)');
             return [];
         } catch (error) {
-            if (error instanceof NetworkError || error instanceof ApiKeyError || error instanceof RateLimitError) {
+            if (error instanceof NetworkError || error instanceof ApiKeyError || error instanceof RateLimitError || error instanceof ModelNotAvailableError) {
                 throw error;
             }
             logger.error('TextRecognizer', 'Text recognition error (file-based)', error);

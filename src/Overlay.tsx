@@ -754,7 +754,7 @@ export const TranslatedTextOverlay: VFC<{
                             100% { opacity: 1; transform: translateY(0); }
                         }
                     `}</style>
-                    <div style={{ fontSize: "14px" }}>
+                    <div style={{ fontSize: "14px", whiteSpace: "pre-line", lineHeight: "1.3" }}>
                         {processingIsError ? processingStep : `${processingStep}...`}
                     </div>
                 </div>

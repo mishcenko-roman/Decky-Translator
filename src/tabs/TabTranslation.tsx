@@ -31,6 +31,8 @@ import googletranslateLogo from "../../assets/googletranslate-logo.png";
 import geminiLogo from "../../assets/gemini-logo.png";
 // @ts-ignore
 import steamdeckLogo from "../../assets/steamdeck-logo.png";
+// @ts-ignore
+import chromeLogo from "../../assets/chrome-logo.png";
 
 // Language options with flag emojis
 const languageOptions = [
@@ -203,6 +205,135 @@ const GeminiModelSelector: VFC<{
     );
 };
 
+// Mirrors CT2ModelManager but for the Chrome Screen AI engine.
+const ChromeScreenAIManager: VFC = () => {
+    const [status, setStatus] = useState<any>({
+        downloaded: false, size: 0, approx_size_mb: 120,
+        downloading: false, progress: 0, error: null,
+    });
+    const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+    const refresh = useCallback(async () => {
+        try {
+            const s = await call<[], any>('get_chromescreenai_status');
+            if (s) setStatus(s);
+        } catch (e) { /* ignore */ }
+    }, []);
+
+    useEffect(() => { refresh(); }, []);
+
+    useEffect(() => {
+        if (status.downloading) {
+            pollRef.current = setInterval(refresh, 500);
+        } else if (pollRef.current) {
+            clearInterval(pollRef.current);
+            pollRef.current = null;
+        }
+        return () => {
+            if (pollRef.current) clearInterval(pollRef.current);
+        };
+    }, [status.downloading, refresh]);
+
+    const handleDownload = async () => {
+        await call('clear_chromescreenai_error');
+        const started = await call<[], boolean>('download_chromescreenai');
+        if (started) {
+            setStatus((prev: any) => ({ ...prev, downloading: true, progress: 0, error: null }));
+        }
+    };
+    const handleCancel = async () => { await call('cancel_chromescreenai_download'); };
+    const handleDelete = async () => { await call('delete_chromescreenai'); refresh(); };
+
+    const isDownloading = status.downloading;
+    const isDownloaded = status.downloaded;
+    const progressPct = Math.round((status.progress || 0) * 100);
+    const statusColor = isDownloading ? "#ffa726" : isDownloaded ? "#4caf50" : "#ff6b6b";
+    const installedSize = status.size ? ` (${formatBytes(status.size)})` : '';
+    const approxSize = status.approx_size_mb ? ` (~${status.approx_size_mb} MB)` : '';
+    const statusText = isDownloading
+        ? `downloading ${progressPct}%`
+        : isDownloaded
+            ? `ready${installedSize}`
+            : `not installed${approxSize}`;
+    const ActionIcon = isDownloading ? HiXMark : isDownloaded ? HiTrash : HiArrowDownTray;
+    const onActionClick = isDownloading ? handleCancel : isDownloaded ? handleDelete : handleDownload;
+
+    return (
+        <>
+            <PanelSectionRow>
+                <Focusable style={{
+                    display: "flex",
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: "12px",
+                    padding: "8px 0px",
+                    width: "100%",
+                }}>
+                    <div style={{ flex: 1, minWidth: 0, paddingLeft: '3px' }}>
+                        <div>Chrome Screen AI</div>
+                        <div style={{
+                            fontSize: "11px",
+                            color: "#888",
+                            fontWeight: "normal",
+                            marginTop: "2px",
+                            whiteSpace: "nowrap",
+                        }}>
+                            offline OCR engine
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "4px" }}>
+                            <div style={{
+                                width: "8px",
+                                height: "8px",
+                                borderRadius: "50%",
+                                backgroundColor: statusColor,
+                                flexShrink: 0,
+                            }} />
+                            <span style={{ fontSize: "11px", color: statusColor, fontWeight: "normal" }}>
+                                {statusText}
+                            </span>
+                        </div>
+                        {isDownloading && (
+                            <div style={{
+                                marginTop: "4px",
+                                height: "3px",
+                                backgroundColor: "rgba(255,255,255,0.1)",
+                                borderRadius: "2px",
+                                overflow: "hidden",
+                            }}>
+                                <div style={{
+                                    width: `${progressPct}%`,
+                                    height: "100%",
+                                    backgroundColor: statusColor,
+                                    borderRadius: "2px",
+                                    transition: "width 0.3s ease",
+                                }} />
+                            </div>
+                        )}
+                    </div>
+                    <DialogButton
+                        onClick={onActionClick}
+                        style={{ minWidth: "40px", width: "40px", padding: "10px 0", flexShrink: 0 }}
+                    >
+                        <ActionIcon />
+                    </DialogButton>
+                </Focusable>
+            </PanelSectionRow>
+
+            {status.error && (
+                <PanelSectionRow>
+                    <Field focusable={true} childrenContainerWidth="max">
+                        <div style={{ color: "#ff6b6b", fontSize: "11px" }}>
+                            {status.error}
+                        </div>
+                    </Field>
+                </PanelSectionRow>
+            )}
+            <div style={{ height: "1px", backgroundColor: "rgba(255,255,255,0.08)" }} />
+        </>
+    );
+};
+
 // NLLB Model Management Component
 const CT2ModelManager: VFC = () => {
     const { settings } = useSettings();
@@ -349,6 +480,7 @@ const CT2ModelManager: VFC = () => {
                     </Field>
                 </PanelSectionRow>
             )}
+            <div style={{ height: "1px", backgroundColor: "rgba(255,255,255,0.08)" }} />
         </>
     );
 };
@@ -449,7 +581,8 @@ export const TabTranslation: VFC = () => {
                         <Focusable style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                             <Dropdown
                                 rgOptions={[
-                                    { label: <span>On-Device</span>, data: "rapidocr" },
+                                    { label: <span>On-Device <span style={{ fontSize: "10px", opacity: 0.7 }}>(RapidOCR)</span></span>, data: "rapidocr" },
+                                    { label: <span>On-Device <span style={{ fontSize: "10px", opacity: 0.7 }}>(Google)</span></span>, data: "chromescreenai" },
                                     { label: <span>OCR.space</span>, data: "ocrspace" },
                                     { label: <span>Google Cloud</span>, data: "googlecloud" },
                                     { label: <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>Gemini Vision <BsStars style={{ fontSize: "12px" }} /></span>, data: "gemini_vision" }
@@ -528,6 +661,7 @@ export const TabTranslation: VFC = () => {
                         onChange={(model) => updateSetting('geminiModel', model, 'Gemini model')}
                     />
                 )}
+                {settings.ocrProvider === 'chromescreenai' && <ChromeScreenAIManager />}
                 <PanelSectionRow>
                     <Field
                         focusable={true}
@@ -545,6 +679,24 @@ export const TabTranslation: VFC = () => {
                                     <div>- Customizable parameters</div>
                                     <div>- Screenshots do not leave your device</div>
                                     <div>- Experimental support</div>
+                                </>
+                            )}
+                            {settings.ocrProvider === 'chromescreenai' && (
+                                <>
+                                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                                        <img src={chromeLogo} alt="" style={{ height: "18px" }} />
+                                        <span style={{ fontWeight: "bold", color: "#dcdedf" }}>On-Device (Chrome Screen AI)</span>
+                                    </div>
+                                    <ProviderRating quality={3} speed={2} />
+                                    <div>- Offline text recognition by Google</div>
+                                    <div>- 120 MB one-time download required</div>
+                                    <div>- Auto-detects 70+ languages</div>
+                                    <div style={{ marginTop: "6px", fontStyle: "italic", color: "#5f6268", fontSize: "10px" }}>
+                                        Downloaded on demand from Google's public server
+                                    </div>
+                                    <div style={{ fontStyle: "italic", color: "#5f6268", fontSize: "10px" }}>
+                                        This plugin is not affiliated with or endorsed by Google
+                                    </div>
                                 </>
                             )}
                             {settings.ocrProvider === 'ocrspace' && (
@@ -605,7 +757,20 @@ export const TabTranslation: VFC = () => {
                     </PanelSectionRow>
                 )}
 
-                {settings.ocrProvider !== 'ocrspace' && settings.ocrProvider !== 'gemini_vision' && (
+                {settings.ocrProvider === 'chromescreenai' && (
+                    <PanelSectionRow>
+                        <ToggleField
+                            label="Faster Recognition"
+                            description="Keeps the recognition engine loaded in memory between translations"
+                            checked={settings.chromeScreenAiPersistentMode}
+                            onChange={(value) => {
+                                updateSetting('chromeScreenAiPersistentMode', value, 'Faster recognition');
+                            }}
+                        />
+                    </PanelSectionRow>
+                )}
+
+                {settings.ocrProvider !== 'ocrspace' && settings.ocrProvider !== 'gemini_vision' && settings.ocrProvider !== 'chromescreenai' && (
                     <PanelSectionRow>
                         <ToggleField
                             label="Customize Recognition"
