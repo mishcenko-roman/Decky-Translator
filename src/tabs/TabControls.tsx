@@ -73,21 +73,7 @@ export const TabControls: VFC<TabControlsProps> = ({ inputDiagnostics }) => {
     const [fontDropdownKey, setFontDropdownKey] = useState(0);
 
     return (
-        <div className="dt-fieldfix" style={{ marginLeft: "-8px", marginRight: "-8px" }}>
-            <style>{`
-                .dt-fieldfix *:has(> * > [role="combobox"]),
-                .dt-fieldfix *:has(> * > * > [role="combobox"]),
-                .dt-fieldfix *:has(> * > [role="switch"]),
-                .dt-fieldfix *:has(> * > * > [role="switch"]),
-                .dt-fieldfix *:has(> * > [role="slider"]),
-                .dt-fieldfix *:has(> * > * > [role="slider"]) {
-                    width: 265px !important;
-                    min-width: 0 !important;
-                }
-                .dt-fieldfix *:has(> * > * > .dt-debug-panel) {
-                    column-gap: 0 !important;
-                }
-            `}</style>
+        <div>
             <PanelSection title="Control">
                 <PanelSectionRow>
                     <DropdownItem

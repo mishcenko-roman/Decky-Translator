@@ -139,6 +139,10 @@ const GameTranslator: VFC<{ logic: GameTranslatorLogic }> = ({ logic }) => {
                     box-shadow: none;
                     backdrop-filter: none;
                 }
+                .decky-translator-tabs [role="tabpanel"] {
+                    padding-left: 0 !important;
+                    padding-right: 0 !important;
+                }
                 `}
             </style>
 

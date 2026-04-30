@@ -43,7 +43,7 @@ export const TabMain: VFC<TabMainProps> = ({ logic, overlayVisible, providerStat
     };
 
     return (
-        <div style={{ marginLeft: "-8px", marginRight: "-8px" }}>
+        <div>
             <PanelSection>
                 <PanelSectionRow>
                     <ToggleField

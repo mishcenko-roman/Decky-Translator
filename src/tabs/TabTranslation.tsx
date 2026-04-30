@@ -182,15 +182,18 @@ const GeminiModelSelector: VFC<{
             <PanelSectionRow>
                 <Field
                     label="Gemini Model"
-                    childrenContainerWidth="fixed"
+                    childrenContainerWidth="max"
+                    childrenLayout="below"
                     focusable={false}
                 >
                     <Focusable style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                        <Dropdown
-                            rgOptions={models}
-                            selectedOption={selectedModel}
-                            onChange={(option) => onChange(option.data)}
-                        />
+                        <div style={{ flex: 1 }}>
+                            <Dropdown
+                                rgOptions={models}
+                                selectedOption={selectedModel}
+                                onChange={(option) => onChange(option.data)}
+                            />
+                        </div>
                         <DialogButton
                             onClick={validateModels}
                             disabled={loading || !hasApiKey}
@@ -532,18 +535,7 @@ export const TabTranslation: VFC = () => {
     }, [settings.initialized, settings.translationProvider]);
 
     return (
-        <div className="dt-fieldfix" style={{ marginLeft: "-8px", marginRight: "-8px", paddingBottom: "40px" }}>
-            <style>{`
-                .dt-fieldfix *:has(> * > [role="combobox"]),
-                .dt-fieldfix *:has(> * > * > [role="combobox"]),
-                .dt-fieldfix *:has(> * > [role="switch"]),
-                .dt-fieldfix *:has(> * > * > [role="switch"]),
-                .dt-fieldfix *:has(> * > [role="slider"]),
-                .dt-fieldfix *:has(> * > * > [role="slider"]) {
-                    width: 265px !important;
-                    min-width: 0 !important;
-                }
-            `}</style>
+        <div style={{ paddingBottom: "40px" }}>
             <PanelSection title="Languages">
                 <PanelSectionRow>
                     <DropdownItem
@@ -575,7 +567,8 @@ export const TabTranslation: VFC = () => {
                 <PanelSectionRow>
                     <Field
                         label="Text Recognition Method"
-                        childrenContainerWidth="fixed"
+                        childrenContainerWidth="max"
+                        childrenLayout="below"
                         focusable={false}
                     >
                         <Focusable style={{ display: "flex", gap: "8px", alignItems: "center" }}>
@@ -668,9 +661,10 @@ export const TabTranslation: VFC = () => {
                 <PanelSectionRow>
                     <Field
                         focusable={true}
-                        childrenContainerWidth="fixed"
+                        childrenContainerWidth="max"
+                        childrenLayout="below"
                     >
-                        <div style={{ color: "#8b929a", fontSize: "12px", lineHeight: "1.6", paddingLeft: "8px" }}>
+                        <div style={{ color: "#8b929a", fontSize: "12px", lineHeight: "1.6" }}>
                             {settings.ocrProvider === 'rapidocr' && (
                                 <>
                                     <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
@@ -863,7 +857,8 @@ export const TabTranslation: VFC = () => {
                 <PanelSectionRow>
                     <Field
                         label="Text Translation Method"
-                        childrenContainerWidth="fixed"
+                        childrenContainerWidth="max"
+                        childrenLayout="below"
                         focusable={false}
                     >
                         {settings.ocrProvider === 'gemini_vision' ? (
@@ -877,15 +872,17 @@ export const TabTranslation: VFC = () => {
                             />
                         ) : (
                         <Focusable style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                            <Dropdown
-                                rgOptions={[
-                                    { label: <span>On-Device</span>, data: "ct2" },
-                                    { label: <span>Google Translate</span>, data: "freegoogle" },
-                                    { label: <span>Google Cloud</span>, data: "googlecloud" }
-                                ]}
-                                selectedOption={settings.translationProvider}
-                                onChange={(option) => updateSetting('translationProvider', option.data, 'Translation provider')}
-                            />
+                            <div style={{ flex: 1 }}>
+                                <Dropdown
+                                    rgOptions={[
+                                        { label: <span>On-Device</span>, data: "ct2" },
+                                        { label: <span>Google Translate</span>, data: "freegoogle" },
+                                        { label: <span>Google Cloud</span>, data: "googlecloud" }
+                                    ]}
+                                    selectedOption={settings.translationProvider}
+                                    onChange={(option) => updateSetting('translationProvider', option.data, 'Translation provider')}
+                                />
+                            </div>
                             {settings.translationProvider === 'googlecloud' && (
                                 <DialogButton
                                     onClick={() => {
@@ -926,9 +923,10 @@ export const TabTranslation: VFC = () => {
                 <PanelSectionRow>
                     <Field
                         focusable={true}
-                        childrenContainerWidth="fixed"
+                        childrenContainerWidth="max"
+                        childrenLayout="below"
                     >
-                        <div style={{ color: "#8b929a", fontSize: "12px", lineHeight: "1.6", paddingLeft: "8px" }}>
+                        <div style={{ color: "#8b929a", fontSize: "12px", lineHeight: "1.6" }}>
                             {settings.ocrProvider === 'gemini_vision' && (
                                 <>
                                     <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
