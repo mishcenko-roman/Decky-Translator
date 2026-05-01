@@ -80,8 +80,8 @@ const rapidocrLanguages = new Set([
 
 function formatBytes(bytes: number): string {
     if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + ' KB';
+    return Math.round(bytes / (1024 * 1024)) + ' MB';
 }
 
 // API Key Modal Component
@@ -252,7 +252,7 @@ const ChromeScreenAIManager: VFC<{ actionRef?: RefObject<HTMLDivElement> }> = ({
     const progressPct = Math.round((status.progress || 0) * 100);
     const statusColor = isDownloading ? "#ffa726" : isDownloaded ? "#4caf50" : "#ff6b6b";
     const installedSize = status.size ? ` (${formatBytes(status.size)})` : '';
-    const approxSize = status.approx_size_mb ? ` (~${status.approx_size_mb} MB)` : '';
+    const approxSize = status.approx_size_mb ? ` (${Math.round(status.approx_size_mb)} MB)` : '';
     const statusText = isDownloading
         ? `downloading ${progressPct}%`
         : isDownloaded
@@ -395,11 +395,12 @@ const CT2ModelManager: VFC<{ actionRef?: RefObject<HTMLDivElement> }> = ({ actio
     const progressPct = Math.round((modelStatus.progress || 0) * 100);
     const statusColor = isDownloading ? "#ffa726" : isDownloaded ? "#4caf50" : "#ff6b6b";
     const installedSize = modelStatus.size ? ` (${formatBytes(modelStatus.size)})` : '';
+    const approxSize = modelStatus.approx_size_mb ? ` (${Math.round(modelStatus.approx_size_mb)} MB)` : '';
     const statusText = isDownloading
         ? `downloading ${progressPct}%`
         : isDownloaded
             ? `ready${installedSize}`
-            : "not installed";
+            : `not installed${approxSize}`;
     const ActionIcon = isDownloading ? HiXMark : isDownloaded ? HiTrash : HiInboxArrowDown;
     const onActionClick = isDownloading ? handleCancel : isDownloaded ? handleDelete : handleDownload;
 
