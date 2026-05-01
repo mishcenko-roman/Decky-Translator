@@ -1,7 +1,9 @@
 # providers/__init__.py
 # Provider factory and manager
 
+import hashlib
 import logging
+import time
 from typing import List, Optional
 
 from .base import (
@@ -25,6 +27,11 @@ from .model_manager import ModelManager
 from .screenai_downloader import ScreenAIDownloader
 
 logger = logging.getLogger(__name__)
+
+_REACHABILITY_TTL = 4.0
+
+_WEB_OCR_PROVIDERS = {"gemini_vision", "googlecloud", "ocrspace"}
+_WEB_TRANSLATION_PROVIDERS = {"googlecloud", "freegoogle"}
 
 # Export all public classes
 __all__ = [
@@ -78,6 +85,8 @@ class ProviderManager:
 
         # Created on first configure() that supplies screenai_models_dir.
         self._screenai_downloader: Optional[ScreenAIDownloader] = None
+
+        self._reachability_cache: dict = {}
 
         logger.debug("ProviderManager initialized")
 
@@ -454,6 +463,66 @@ class ProviderManager:
         status["chromescreenai_downloaded"] = self.is_chromescreenai_downloaded()
 
         return status
+
+    async def check_web_reachability(self) -> dict:
+        """Probe reachability of the currently selected web providers."""
+        ocr_pref = self._ocr_provider_preference
+        trans_pref = self._translation_provider_preference
+
+        result = {"ocr": None, "translation": None, "checked_at": time.time()}
+
+        # gemini_vision is a combined OCR+translation call; probe once and mirror
+        if ocr_pref == "gemini_vision":
+            r = await self._probe_cached("gemini_vision", "ocr", self._gemini_api_key)
+            result["ocr"] = r
+            result["translation"] = r
+            return result
+
+        if ocr_pref in _WEB_OCR_PROVIDERS:
+            key = self._google_api_key if ocr_pref == "googlecloud" else ""
+            result["ocr"] = await self._probe_cached(ocr_pref, "ocr", key)
+
+        if trans_pref in _WEB_TRANSLATION_PROVIDERS:
+            key = self._google_api_key if trans_pref == "googlecloud" else ""
+            result["translation"] = await self._probe_cached(trans_pref, "translation", key)
+
+        return result
+
+    async def _probe_cached(self, provider: str, kind: str, api_key: str) -> dict:
+        key_hash = hashlib.sha256((api_key or "").encode("utf-8")).hexdigest()[:16]
+        cache_key = (provider, kind, key_hash)
+        cached = self._reachability_cache.get(cache_key)
+        now = time.time()
+        if cached and (now - cached[0]) < _REACHABILITY_TTL:
+            return cached[1]
+
+        ok, reason = await self._probe_provider(provider, kind)
+        result = {"ok": ok, "reason": reason, "provider": provider}
+        self._reachability_cache[cache_key] = (now, result)
+        return result
+
+    async def _probe_provider(self, provider: str, kind: str) -> tuple:
+        try:
+            if provider == "gemini_vision":
+                p = self.get_ocr_provider(ProviderType.GEMINI_VISION)
+            elif provider == "googlecloud" and kind == "ocr":
+                p = self.get_ocr_provider(ProviderType.GOOGLE)
+            elif provider == "googlecloud" and kind == "translation":
+                p = self.get_translation_provider(ProviderType.GOOGLE)
+            elif provider == "ocrspace":
+                p = self.get_ocr_provider(ProviderType.OCR_SPACE)
+            elif provider == "freegoogle":
+                p = self.get_translation_provider(ProviderType.FREE_GOOGLE)
+            else:
+                return False, f"Unknown provider ({provider})"
+
+            if p is None or not hasattr(p, "test_network"):
+                return False, "Provider unavailable"
+
+            return await p.test_network()
+        except Exception as e:
+            logger.warning(f"Reachability probe failed for {provider}/{kind}: {e}")
+            return False, f"Probe failed: {type(e).__name__}"
 
     # -- NLLB model management --
 

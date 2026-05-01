@@ -155,3 +155,26 @@ class GoogleTranslateProvider(TranslationProvider):
         except Exception as e:
             logger.error(f"Batch translation error: {e}")
             return texts
+
+    async def test_network(self) -> tuple:
+        if not self._api_key:
+            return False, "API key required"
+
+        def _probe():
+            url = f"{self._endpoint}/languages?key={self._api_key}"
+            try:
+                resp = requests.get(url, timeout=4)
+            except (requests.ConnectionError, requests.Timeout):
+                return False, "Network unreachable"
+            except Exception as e:
+                return False, f"Probe failed: {type(e).__name__}"
+            code = resp.status_code
+            if code == 200:
+                return True, ""
+            if code in (400, 401, 403):
+                return False, "Invalid API key"
+            if code == 429:
+                return False, "Rate limited"
+            return False, f"API error ({code})"
+
+        return await asyncio.to_thread(_probe)

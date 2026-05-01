@@ -32,14 +32,49 @@ const StatusDot: VFC<{ ok: boolean }> = ({ ok }) => (
     }} />
 );
 
+const PendingDot: VFC = () => (
+    <span style={{
+        display: 'inline-block',
+        width: '5px',
+        height: '5px',
+        borderRadius: '50%',
+        backgroundColor: '#888',
+        marginRight: '6px',
+        flexShrink: 0
+    }} />
+);
+
+type ReachResult = { ok: boolean; reason: string; provider: string } | null | undefined;
+
+const ReachabilityRow: VFC<{ result: ReachResult; expectedProvider: string }> = ({ result, expectedProvider }) => {
+    if (!result || result.provider !== expectedProvider) {
+        return (
+            <div style={{ color: '#666', fontSize: '10px', display: 'flex', alignItems: 'center' }}>
+                <PendingDot />
+                <span>Checking...</span>
+            </div>
+        );
+    }
+    return (
+        <div style={{ color: '#666', fontSize: '10px', display: 'flex', alignItems: 'center' }}>
+            <StatusDot ok={result.ok} />
+            <span>{result.ok ? 'Ready' : `Not ready (${result.reason || 'unreachable'})`}</span>
+        </div>
+    );
+};
+
 interface TabMainProps {
     logic: GameTranslatorLogic;
     overlayVisible: boolean;
     providerStatus: any;
+    webReachability: {
+        ocr?: ReachResult;
+        translation?: ReachResult;
+    } | null;
     onNavigateToTab: (tabId: string, scrollTargetId?: string) => void;
 }
 
-export const TabMain: VFC<TabMainProps> = ({ logic, overlayVisible, providerStatus, onNavigateToTab }) => {
+export const TabMain: VFC<TabMainProps> = ({ logic, overlayVisible, providerStatus, webReachability, onNavigateToTab }) => {
     const { settings, updateSetting } = useSettings();
 
     const ocrNeedsDownload =
@@ -152,7 +187,7 @@ export const TabMain: VFC<TabMainProps> = ({ logic, overlayVisible, providerStat
                                         <div style={{ color: '#666', fontSize: '10px' }}>
                                             Model: {settings.geminiModel.replace(/^gemini-/, '').split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
                                         </div>
-                                        <div style={{ color: '#666', fontSize: '10px' }}>Requires internet connection</div>
+                                        <ReachabilityRow result={webReachability?.ocr} expectedProvider="gemini_vision" />
                                     </div>
                                 )}
                                 {settings.ocrProvider === 'googlecloud' && (
@@ -160,7 +195,7 @@ export const TabMain: VFC<TabMainProps> = ({ logic, overlayVisible, providerStat
                                         <div style={{ color: settings.googleApiKey ? '#666' : '#ff6b6b', fontSize: '10px' }}>
                                             {settings.googleApiKey ? 'API key configured' : 'API key required'}
                                         </div>
-                                        <div style={{ color: '#666', fontSize: '10px' }}>Requires internet connection</div>
+                                        <ReachabilityRow result={webReachability?.ocr} expectedProvider="googlecloud" />
                                     </div>
                                 )}
                                 {settings.ocrProvider === 'ocrspace' && (
@@ -251,7 +286,7 @@ export const TabMain: VFC<TabMainProps> = ({ logic, overlayVisible, providerStat
                                                 )}
                                             </>
                                         )}
-                                        <div style={{ color: '#666', fontSize: '10px' }}>Requires internet connection</div>
+                                        <ReachabilityRow result={webReachability?.ocr} expectedProvider="ocrspace" />
                                     </div>
                                 )}
                                 <div style={{ display: 'flex', alignItems: 'center', marginBottom: '2px' }}>
@@ -272,13 +307,13 @@ export const TabMain: VFC<TabMainProps> = ({ logic, overlayVisible, providerStat
                                             <div style={{ color: '#666', fontSize: '10px' }}>
                                                 Model: {settings.geminiModel.replace(/^gemini-/, '').split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
                                             </div>
-                                            <div style={{ color: '#666', fontSize: '10px' }}>Requires internet connection</div>
+                                            <ReachabilityRow result={webReachability?.translation} expectedProvider="gemini_vision" />
                                         </>
                                     )}
                                     {settings.ocrProvider !== 'gemini_vision' && settings.translationProvider === 'freegoogle' && (
                                         <>
                                             <div style={{ color: '#666', fontSize: '10px' }}>No API key needed</div>
-                                            <div style={{ color: '#666', fontSize: '10px' }}>Requires internet connection</div>
+                                            <ReachabilityRow result={webReachability?.translation} expectedProvider="freegoogle" />
                                         </>
                                     )}
                                     {settings.ocrProvider !== 'gemini_vision' && settings.translationProvider === 'googlecloud' && (
@@ -286,7 +321,7 @@ export const TabMain: VFC<TabMainProps> = ({ logic, overlayVisible, providerStat
                                             <div style={{ color: settings.googleApiKey ? '#666' : '#ff6b6b', fontSize: '10px' }}>
                                                 {settings.googleApiKey ? 'API key configured' : 'API key required'}
                                             </div>
-                                            <div style={{ color: '#666', fontSize: '10px' }}>Requires internet connection</div>
+                                            <ReachabilityRow result={webReachability?.translation} expectedProvider="googlecloud" />
                                         </>
                                     )}
                                     {settings.ocrProvider !== 'gemini_vision' && settings.translationProvider === 'ct2' && (

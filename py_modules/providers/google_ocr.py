@@ -123,6 +123,29 @@ class GoogleVisionProvider(OCRProvider):
             logger.error(f"Google Vision OCR error: {e}")
             return []
 
+    async def test_network(self) -> tuple:
+        if not self._api_key:
+            return False, "API key required"
+
+        def _probe():
+            url = f"https://vision.googleapis.com/$discovery/rest?version=v1&key={self._api_key}"
+            try:
+                resp = requests.get(url, timeout=4)
+            except (requests.ConnectionError, requests.Timeout):
+                return False, "Network unreachable"
+            except Exception as e:
+                return False, f"Probe failed: {type(e).__name__}"
+            code = resp.status_code
+            if code == 200:
+                return True, ""
+            if code in (400, 401, 403):
+                return False, "Invalid API key"
+            if code == 429:
+                return False, "Rate limited"
+            return False, f"API error ({code})"
+
+        return await asyncio.to_thread(_probe)
+
     def _parse_response(self, result: dict) -> List[TextRegion]:
         """Parse Google Vision API response into TextRegion objects."""
         text_regions = []

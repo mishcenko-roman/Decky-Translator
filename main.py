@@ -1160,6 +1160,15 @@ class Plugin:
             logger.error(f"Error getting provider status: {str(e)}")
             return {"error": str(e)}
 
+    async def check_web_reachability(self):
+        try:
+            if self._provider_manager:
+                return await self._provider_manager.check_web_reachability()
+            return {"error": "Provider manager not initialized"}
+        except Exception as e:
+            logger.error(f"Error checking web reachability: {str(e)}")
+            return {"error": str(e)}
+
     async def take_screenshot(self, app_name: str = ""):
         logger.debug(f"Taking screenshot for app: {app_name}")
         global _processing_lock

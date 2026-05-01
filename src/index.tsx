@@ -16,7 +16,9 @@ import {
 import {
     VFC,
     useState,
-    useEffect
+    useEffect,
+    useRef,
+    useCallback
 } from "react";
 
 import { BsTranslate } from "react-icons/bs";
@@ -58,6 +60,15 @@ const GameTranslator: VFC<{ logic: GameTranslatorLogic }> = ({ logic }) => {
     const [providerStatus, setProviderStatus] = useState<any>(null);
     const [currentTabRoute, setCurrentTabRoute] = useState<string>("main");
     const [pendingScrollTarget, setPendingScrollTarget] = useState<string | null>(null);
+    const [webReachability, setWebReachability] = useState<{
+        ocr?: { ok: boolean; reason: string; provider: string } | null;
+        translation?: { ok: boolean; reason: string; provider: string } | null;
+    } | null>(null);
+
+    const currentTabRouteRef = useRef(currentTabRoute);
+    const settingsRef = useRef(settings);
+    useEffect(() => { currentTabRouteRef.current = currentTabRoute; }, [currentTabRoute]);
+    useEffect(() => { settingsRef.current = settings; }, [settings]);
 
     const handleNavigateToTab = (tabId: string, scrollTargetId?: string) => {
         setCurrentTabRoute(tabId);
@@ -83,25 +94,53 @@ const GameTranslator: VFC<{ logic: GameTranslatorLogic }> = ({ logic }) => {
         };
     }, [logic, settings.enabled]);
 
-    useEffect(() => {
-        const fetchProviderStatus = async () => {
-            try {
-                const result = await call<[], any>('get_provider_status');
-                if (result) {
-                    setProviderStatus(result);
-                }
-            } catch (error) {
-                logger.error('GameTranslator', 'Failed to fetch provider status', error);
-            }
-        };
+    const probeReachability = useCallback(async () => {
+        const s = settingsRef.current;
+        if (currentTabRouteRef.current !== 'main' || !s?.enabled) return;
+        const webOcr = new Set(['gemini_vision', 'googlecloud', 'ocrspace']);
+        const webTrans = new Set(['freegoogle', 'googlecloud']);
+        const probeOcr = webOcr.has(s.ocrProvider);
+        const probeTrans = s.ocrProvider !== 'gemini_vision' && webTrans.has(s.translationProvider);
+        if (!probeOcr && !probeTrans) return;
 
+        try {
+            const reach = await call<[], any>('check_web_reachability');
+            if (reach && !reach.error) {
+                setWebReachability({ ocr: reach.ocr ?? null, translation: reach.translation ?? null });
+            }
+        } catch (error) {
+            logger.error('GameTranslator', 'Failed to probe web reachability', error);
+        }
+    }, []);
+
+    const fetchProviderStatus = useCallback(async () => {
+        try {
+            const result = await call<[], any>('get_provider_status');
+            if (result) {
+                setProviderStatus(result);
+            }
+        } catch (error) {
+            logger.error('GameTranslator', 'Failed to fetch provider status', error);
+        }
+        await probeReachability();
+    }, [probeReachability]);
+
+    useEffect(() => {
         fetchProviderStatus();
-        const intervalId = setInterval(fetchProviderStatus, 5000);
+        const intervalId = setInterval(fetchProviderStatus, 10000);
 
         return () => {
             clearInterval(intervalId);
         };
-    }, []);
+    }, [fetchProviderStatus]);
+
+    useEffect(() => {
+        if (currentTabRoute === 'main') fetchProviderStatus();
+    }, [currentTabRoute, fetchProviderStatus]);
+
+    useEffect(() => {
+        setWebReachability(null);
+    }, [settings.ocrProvider, settings.translationProvider]);
 
     // Refresh diagnostics while debug mode is on
     useEffect(() => {
@@ -163,7 +202,7 @@ const GameTranslator: VFC<{ logic: GameTranslatorLogic }> = ({ logic }) => {
                         {
                             // @ts-ignore
                             title: <IconTranslate />,
-                            content: <TabMain logic={logic} overlayVisible={overlayVisible} providerStatus={providerStatus} onNavigateToTab={handleNavigateToTab} />,
+                            content: <TabMain logic={logic} overlayVisible={overlayVisible} providerStatus={providerStatus} webReachability={webReachability} onNavigateToTab={handleNavigateToTab} />,
                             id: "main",
                         },
                         {

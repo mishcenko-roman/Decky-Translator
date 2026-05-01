@@ -502,3 +502,15 @@ while True:
         except Exception as e:
             logger.debug(f"Error parsing line {line_idx}: {e}")
             return None
+
+    async def test_network(self) -> tuple:
+        def _probe():
+            try:
+                requests.head("https://api.ocr.space/parse/image", timeout=4)
+                return True, ""
+            except (requests.ConnectionError, requests.Timeout):
+                return False, "Network unreachable"
+            except Exception as e:
+                return False, f"Probe failed: {type(e).__name__}"
+
+        return await asyncio.to_thread(_probe)

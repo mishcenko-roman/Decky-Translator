@@ -267,3 +267,27 @@ class FreeTranslateProvider(TranslationProvider):
 
         logger.debug(f"Batch translation complete: {len(results)} results")
         return results
+
+    async def test_network(self) -> tuple:
+        def _probe():
+            params = {
+                "client": "gtx",
+                "sl": "en",
+                "tl": "en",
+                "dt": "t",
+                "q": "ok",
+            }
+            try:
+                resp = requests.get(self.TRANSLATE_URL, params=params, timeout=4)
+            except (requests.ConnectionError, requests.Timeout):
+                return False, "Network unreachable"
+            except Exception as e:
+                return False, f"Probe failed: {type(e).__name__}"
+            code = resp.status_code
+            if code == 200:
+                return True, ""
+            if code in (403, 429):
+                return False, "Rate limited"
+            return False, f"Service error ({code})"
+
+        return await asyncio.to_thread(_probe)
