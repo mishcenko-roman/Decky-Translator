@@ -44,6 +44,18 @@ const PendingDot: VFC = () => (
     }} />
 );
 
+const InstallingDot: VFC = () => (
+    <span style={{
+        display: 'inline-block',
+        width: '5px',
+        height: '5px',
+        borderRadius: '50%',
+        backgroundColor: '#ffa726',
+        marginRight: '6px',
+        flexShrink: 0
+    }} />
+);
+
 type ReachResult = { ok: boolean; reason: string; provider: string } | null | undefined;
 
 const ReachabilityRow: VFC<{ result: ReachResult; expectedProvider: string }> = ({ result, expectedProvider }) => {
@@ -171,11 +183,20 @@ export const TabMain: VFC<TabMainProps> = ({ logic, overlayVisible, providerStat
                                 {settings.ocrProvider === 'chromescreenai' && (
                                     <div style={{ marginLeft: '22px', marginBottom: '6px' }}>
                                         {providerStatus?.chromescreenai_downloaded && (
-                                            <div style={{ color: '#666', fontSize: '10px' }}>Installed engine: Chrome Screen AI</div>
+                                            <div style={{ color: '#666', fontSize: '10px' }}>Engine: Chrome Screen AI</div>
                                         )}
                                         <div style={{ color: '#666', fontSize: '10px', display: 'flex', alignItems: 'center' }}>
-                                            <StatusDot ok={!!providerStatus?.chromescreenai_downloaded} />
-                                            <span>{providerStatus?.chromescreenai_downloaded ? 'Ready' : 'Not ready (engine not installed)'}</span>
+                                            {providerStatus?.chromescreenai_downloading ? (
+                                                <>
+                                                    <InstallingDot />
+                                                    <span>Installing...</span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <StatusDot ok={!!providerStatus?.chromescreenai_downloaded} />
+                                                    <span>{providerStatus?.chromescreenai_downloaded ? 'Ready' : 'Not ready (Engine not installed)'}</span>
+                                                </>
+                                            )}
                                         </div>
                                     </div>
                                 )}
@@ -327,11 +348,20 @@ export const TabMain: VFC<TabMainProps> = ({ logic, overlayVisible, providerStat
                                     {settings.ocrProvider !== 'gemini_vision' && settings.translationProvider === 'ct2' && (
                                         <>
                                             {providerStatus?.nllb_downloaded && (
-                                                <div style={{ color: '#666', fontSize: '10px' }}>Installed model: NLLB-200 1.3B</div>
+                                                <div style={{ color: '#666', fontSize: '10px' }}>Model: NLLB-200 1.3B</div>
                                             )}
                                             <div style={{ color: '#666', fontSize: '10px', display: 'flex', alignItems: 'center' }}>
-                                                <StatusDot ok={!!providerStatus?.nllb_downloaded} />
-                                                <span>{providerStatus?.nllb_downloaded ? 'Ready' : 'Not ready (model not installed)'}</span>
+                                                {providerStatus?.nllb_downloading ? (
+                                                    <>
+                                                        <InstallingDot />
+                                                        <span>Installing...</span>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <StatusDot ok={!!providerStatus?.nllb_downloaded} />
+                                                        <span>{providerStatus?.nllb_downloaded ? 'Ready' : 'Not ready (Model not installed)'}</span>
+                                                    </>
+                                                )}
                                             </div>
                                         </>
                                     )}

@@ -462,6 +462,14 @@ class ProviderManager:
         status["nllb_downloaded"] = self.is_nllb_model_downloaded()
         status["chromescreenai_downloaded"] = self.is_chromescreenai_downloaded()
 
+        nllb_dl = self._model_manager.get_download_status() if self._model_manager else {}
+        status["nllb_downloading"] = bool(nllb_dl.get("downloading"))
+        status["nllb_progress"] = float(nllb_dl.get("progress") or 0)
+
+        scai_dl = self._screenai_downloader.get_status() if self._screenai_downloader else {}
+        status["chromescreenai_downloading"] = bool(scai_dl.get("downloading"))
+        status["chromescreenai_progress"] = float(scai_dl.get("progress") or 0)
+
         return status
 
     async def check_web_reachability(self) -> dict:
