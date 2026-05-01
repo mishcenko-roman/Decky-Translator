@@ -20,6 +20,18 @@ import { useSettings } from "../SettingsContext";
 import { GameTranslatorLogic } from "../Translator";
 import { logger } from "../Logger";
 
+const StatusDot: VFC<{ ok: boolean }> = ({ ok }) => (
+    <span style={{
+        display: 'inline-block',
+        width: '5px',
+        height: '5px',
+        borderRadius: '50%',
+        backgroundColor: ok ? '#4caf50' : '#ff6b6b',
+        marginRight: '6px',
+        flexShrink: 0
+    }} />
+);
+
 interface TabMainProps {
     logic: GameTranslatorLogic;
     overlayVisible: boolean;
@@ -83,25 +95,26 @@ export const TabMain: VFC<TabMainProps> = ({ logic, overlayVisible, providerStat
                                 </div>
                                 {settings.ocrProvider === 'rapidocr' && (
                                     <div style={{ marginLeft: '22px', marginBottom: '6px' }}>
-                                        {providerStatus?.rapidocr_available ? (
-                                            <>
-                                                <div style={{ color: '#666', fontSize: '10px' }}>On-device Text Recognition</div>
-                                                <div style={{ color: '#666', fontSize: '10px' }}>Version:{providerStatus?.rapidocr_info?.version ? ` (v${providerStatus.rapidocr_info.version})` : ''}</div>
-                                            </>
-                                        ) : (
-                                            <div style={{ color: '#ff6b6b', fontSize: '10px' }}>
-                                                {providerStatus?.rapidocr_error || 'Not available - RapidOCR not initialized'}
+                                        {providerStatus?.rapidocr_available && (
+                                            <div style={{ color: '#666', fontSize: '10px' }}>
+                                                Installed model: RapidOCR{providerStatus?.rapidocr_info?.version ? ` v${providerStatus.rapidocr_info.version}` : ''}
                                             </div>
                                         )}
-                                        <div style={{ color: '#666', fontSize: '10px' }}>No internet needed</div>
+                                        <div style={{ color: '#666', fontSize: '10px', display: 'flex', alignItems: 'center' }}>
+                                            <StatusDot ok={!!providerStatus?.rapidocr_available} />
+                                            <span>{providerStatus?.rapidocr_available ? 'Ready' : `Not ready (${providerStatus?.rapidocr_error || 'RapidOCR not initialized'})`}</span>
+                                        </div>
                                     </div>
                                 )}
                                 {settings.ocrProvider === 'chromescreenai' && (
                                     <div style={{ marginLeft: '22px', marginBottom: '6px' }}>
-                                        <div style={{ color: providerStatus?.chromescreenai_downloaded ? '#666' : '#ff6b6b', fontSize: '10px' }}>
-                                            {providerStatus?.chromescreenai_downloaded ? 'Chrome Screen AI engine ready' : 'Engine not downloaded'}
+                                        {providerStatus?.chromescreenai_downloaded && (
+                                            <div style={{ color: '#666', fontSize: '10px' }}>Installed engine: Chrome Screen AI</div>
+                                        )}
+                                        <div style={{ color: '#666', fontSize: '10px', display: 'flex', alignItems: 'center' }}>
+                                            <StatusDot ok={!!providerStatus?.chromescreenai_downloaded} />
+                                            <span>{providerStatus?.chromescreenai_downloaded ? 'Ready' : 'Not ready (engine not installed)'}</span>
                                         </div>
-                                        <div style={{ color: '#666', fontSize: '10px' }}>No internet needed</div>
                                     </div>
                                 )}
                                 {settings.ocrProvider === 'gemini_vision' && (
@@ -251,10 +264,13 @@ export const TabMain: VFC<TabMainProps> = ({ logic, overlayVisible, providerStat
                                     )}
                                     {settings.ocrProvider !== 'gemini_vision' && settings.translationProvider === 'ct2' && (
                                         <>
-                                            <div style={{ color: providerStatus?.nllb_downloaded ? '#666' : '#ff6b6b', fontSize: '10px' }}>
-                                                {providerStatus?.nllb_downloaded ? 'Installed model: NLLB-200 1.3B' : 'Installed model: None'}
+                                            {providerStatus?.nllb_downloaded && (
+                                                <div style={{ color: '#666', fontSize: '10px' }}>Installed model: NLLB-200 1.3B</div>
+                                            )}
+                                            <div style={{ color: '#666', fontSize: '10px', display: 'flex', alignItems: 'center' }}>
+                                                <StatusDot ok={!!providerStatus?.nllb_downloaded} />
+                                                <span>{providerStatus?.nllb_downloaded ? 'Ready' : 'Not ready (model not installed)'}</span>
                                             </div>
-                                            <div style={{ color: '#666', fontSize: '10px' }}>No internet needed</div>
                                         </>
                                     )}
                                 </div>
