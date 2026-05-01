@@ -15,10 +15,10 @@ import {
     Focusable
 } from "@decky/ui";
 
-import { VFC, useState, useEffect, useRef, useCallback } from "react";
+import { VFC, useState, useEffect, useRef, useCallback, RefObject } from "react";
 import { call } from "@decky/api";
 import { useSettings } from "../SettingsContext";
-import { HiKey, HiLockClosed, HiArrowDownTray, HiTrash, HiXMark } from "react-icons/hi2";
+import { HiKey, HiLockClosed, HiInboxArrowDown, HiTrash, HiXMark } from "react-icons/hi2";
 import { BsArrowRepeat, BsStars } from "react-icons/bs";
 
 // @ts-ignore
@@ -209,7 +209,7 @@ const GeminiModelSelector: VFC<{
 };
 
 // Mirrors CT2ModelManager but for the Chrome Screen AI engine.
-const ChromeScreenAIManager: VFC = () => {
+const ChromeScreenAIManager: VFC<{ actionRef?: RefObject<HTMLDivElement> }> = ({ actionRef }) => {
     const [status, setStatus] = useState<any>({
         downloaded: false, size: 0, approx_size_mb: 120,
         downloading: false, progress: 0, error: null,
@@ -258,7 +258,7 @@ const ChromeScreenAIManager: VFC = () => {
         : isDownloaded
             ? `ready${installedSize}`
             : `not installed${approxSize}`;
-    const ActionIcon = isDownloading ? HiXMark : isDownloaded ? HiTrash : HiArrowDownTray;
+    const ActionIcon = isDownloading ? HiXMark : isDownloaded ? HiTrash : HiInboxArrowDown;
     const onActionClick = isDownloading ? handleCancel : isDownloaded ? handleDelete : handleDownload;
 
     return (
@@ -315,10 +315,11 @@ const ChromeScreenAIManager: VFC = () => {
                         )}
                     </div>
                     <DialogButton
+                        ref={actionRef}
                         onClick={onActionClick}
                         style={{ minWidth: "40px", width: "40px", padding: "10px 0", flexShrink: 0 }}
                     >
-                        <ActionIcon />
+                        <ActionIcon size={20} />
                     </DialogButton>
                 </Focusable>
             </PanelSectionRow>
@@ -338,7 +339,7 @@ const ChromeScreenAIManager: VFC = () => {
 };
 
 // NLLB Model Management Component
-const CT2ModelManager: VFC = () => {
+const CT2ModelManager: VFC<{ actionRef?: RefObject<HTMLDivElement> }> = ({ actionRef }) => {
     const { settings } = useSettings();
     const [modelStatus, setModelStatus] = useState<any>({
         downloaded: false, size: 0, approx_size_mb: 1410,
@@ -399,7 +400,7 @@ const CT2ModelManager: VFC = () => {
         : isDownloaded
             ? `ready${installedSize}`
             : "not installed";
-    const ActionIcon = isDownloading ? HiXMark : isDownloaded ? HiTrash : HiArrowDownTray;
+    const ActionIcon = isDownloading ? HiXMark : isDownloaded ? HiTrash : HiInboxArrowDown;
     const onActionClick = isDownloading ? handleCancel : isDownloaded ? handleDelete : handleDownload;
 
     return (
@@ -456,10 +457,11 @@ const CT2ModelManager: VFC = () => {
                         )}
                     </div>
                     <DialogButton
+                        ref={actionRef}
                         onClick={onActionClick}
                         style={{ minWidth: "40px", width: "40px", padding: "10px 0", flexShrink: 0 }}
                     >
-                        <ActionIcon />
+                        <ActionIcon size={20} />
                     </DialogButton>
                 </Focusable>
             </PanelSectionRow>
@@ -506,8 +508,34 @@ const ProviderRating: VFC<{ quality: number; speed: number }> = ({ quality, spee
     </div>
 );
 
-export const TabTranslation: VFC = () => {
+interface TabTranslationProps {
+    scrollTarget?: string | null;
+    onScrolled?: () => void;
+}
+
+export const TabTranslation: VFC<TabTranslationProps> = ({ scrollTarget, onScrolled }) => {
     const { settings, updateSetting } = useSettings();
+    const chromescreenaiActionRef = useRef<HTMLDivElement>(null);
+    const ct2ActionRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (!scrollTarget) return;
+        const ref = scrollTarget === 'chromescreenai-action' ? chromescreenaiActionRef
+                  : scrollTarget === 'ct2-action' ? ct2ActionRef
+                  : null;
+
+        // Wait for Steam's tab transition + focus router to settle before scrolling, otherwise our scroll gets overridden.
+        const timeoutId = setTimeout(() => {
+            const el = ref?.current as HTMLElement | null;
+            if (el) {
+                el.focus({ preventScroll: true });
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+            onScrolled?.();
+        }, 400);
+
+        return () => clearTimeout(timeoutId);
+    }, [scrollTarget]);
 
     const isCT2 = settings.translationProvider === 'ct2';
     const filteredLanguageOptions = isCT2
@@ -657,7 +685,9 @@ export const TabTranslation: VFC = () => {
                         onChange={(model) => updateSetting('geminiModel', model, 'Gemini model')}
                     />
                 )}
-                {settings.ocrProvider === 'chromescreenai' && <ChromeScreenAIManager />}
+                {settings.ocrProvider === 'chromescreenai' && (
+                    <ChromeScreenAIManager actionRef={chromescreenaiActionRef} />
+                )}
                 <PanelSectionRow>
                     <Field
                         focusable={true}
@@ -917,7 +947,7 @@ export const TabTranslation: VFC = () => {
                 </PanelSectionRow>
 
                 {settings.ocrProvider !== 'gemini_vision' && settings.translationProvider === 'ct2' && (
-                    <CT2ModelManager />
+                    <CT2ModelManager actionRef={ct2ActionRef} />
                 )}
 
                 <PanelSectionRow>

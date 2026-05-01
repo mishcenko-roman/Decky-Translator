@@ -57,6 +57,12 @@ const GameTranslator: VFC<{ logic: GameTranslatorLogic }> = ({ logic }) => {
     const [inputDiagnostics, setInputDiagnostics] = useState<any>(null);
     const [providerStatus, setProviderStatus] = useState<any>(null);
     const [currentTabRoute, setCurrentTabRoute] = useState<string>("main");
+    const [pendingScrollTarget, setPendingScrollTarget] = useState<string | null>(null);
+
+    const handleNavigateToTab = (tabId: string, scrollTargetId?: string) => {
+        setCurrentTabRoute(tabId);
+        setPendingScrollTarget(scrollTargetId ?? null);
+    };
 
     useEffect(() => {
         // Don't poll overlay state if plugin is disabled
@@ -157,13 +163,13 @@ const GameTranslator: VFC<{ logic: GameTranslatorLogic }> = ({ logic }) => {
                         {
                             // @ts-ignore
                             title: <IconTranslate />,
-                            content: <TabMain logic={logic} overlayVisible={overlayVisible} providerStatus={providerStatus} />,
+                            content: <TabMain logic={logic} overlayVisible={overlayVisible} providerStatus={providerStatus} onNavigateToTab={handleNavigateToTab} />,
                             id: "main",
                         },
                         {
                             // @ts-ignore
                             title: <IconLanguage />,
-                            content: <TabTranslation />,
+                            content: <TabTranslation scrollTarget={pendingScrollTarget} onScrolled={() => setPendingScrollTarget(null)} />,
                             id: "translation",
                         },
                         {

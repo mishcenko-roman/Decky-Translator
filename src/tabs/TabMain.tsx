@@ -14,7 +14,7 @@ import {
 import { VFC } from "react";
 import { BsTranslate, BsXLg, BsEye } from "react-icons/bs";
 import { SiKofi } from "react-icons/si";
-import { HiQrCode } from "react-icons/hi2";
+import { HiQrCode, HiInboxArrowDown } from "react-icons/hi2";
 import showQrModal from "../showQrModal";
 import { useSettings } from "../SettingsContext";
 import { GameTranslatorLogic } from "../Translator";
@@ -36,22 +36,52 @@ interface TabMainProps {
     logic: GameTranslatorLogic;
     overlayVisible: boolean;
     providerStatus: any;
+    onNavigateToTab: (tabId: string, scrollTargetId?: string) => void;
 }
 
-export const TabMain: VFC<TabMainProps> = ({ logic, overlayVisible, providerStatus }) => {
+export const TabMain: VFC<TabMainProps> = ({ logic, overlayVisible, providerStatus, onNavigateToTab }) => {
     const { settings, updateSetting } = useSettings();
+
+    const ocrNeedsDownload =
+        settings.ocrProvider === 'chromescreenai'
+        && !!providerStatus
+        && !providerStatus.chromescreenai_downloaded;
+
+    const translationNeedsDownload =
+        settings.ocrProvider !== 'gemini_vision'
+        && settings.translationProvider === 'ct2'
+        && !!providerStatus
+        && !providerStatus.nllb_downloaded;
 
     const handleButtonClick = () => {
         if (overlayVisible) {
             logic.imageState.hideImage();
             Router.CloseSideMenus();
-        } else {
-            // Close menu first, then wait for UI to fully close before taking screenshot
-            Router.CloseSideMenus();
-            setTimeout(() => {
-                logic.takeScreenshotAndTranslate().catch(err => logger.error('TabMain', 'Screenshot failed', err));
-            }, 200);
+            return;
         }
+        if (ocrNeedsDownload) {
+            onNavigateToTab('translation', 'chromescreenai-action');
+            return;
+        }
+        if (translationNeedsDownload) {
+            onNavigateToTab('translation', 'ct2-action');
+            return;
+        }
+        // Close menu first, then wait for UI to fully close before taking screenshot
+        Router.CloseSideMenus();
+        setTimeout(() => {
+            logic.takeScreenshotAndTranslate().catch(err => logger.error('TabMain', 'Screenshot failed', err));
+        }, 200);
+    };
+
+    const renderButtonContent = () => {
+        if (overlayVisible) {
+            return <span style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}><BsXLg /> Close Overlay</span>;
+        }
+        if (ocrNeedsDownload || translationNeedsDownload) {
+            return <span style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}><HiInboxArrowDown size={20} /> Download required</span>;
+        }
+        return <span style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}><BsTranslate /> Translate</span>;
     };
 
     return (
@@ -73,10 +103,7 @@ export const TabMain: VFC<TabMainProps> = ({ logic, overlayVisible, providerStat
                                 bottomSeparator="standard"
                                 layout="below"
                                 onClick={handleButtonClick}>
-                                {overlayVisible ?
-                                    <span><BsXLg style={{marginRight: "8px"}} /> Close Overlay</span> :
-                                    <span><BsTranslate style={{marginRight: "8px"}} /> Translate</span>
-                                }
+                                {renderButtonContent()}
                             </ButtonItem>
                         </PanelSectionRow>
 
