@@ -579,12 +579,14 @@ export const TabTranslation: VFC = () => {
                         focusable={false}
                     >
                         <Focusable style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                            <div className="dt-ocr-dropdown-wrapper" style={{ flex: 1 }}>
+                                <style>{`.dt-ocr-dropdown-wrapper .dt-recommended-tag { display: none !important; }`}</style>
                             <Dropdown
                                 rgOptions={[
                                     { label: <span>On-Device <span style={{ fontSize: "10px", opacity: 0.7 }}>(RapidOCR)</span></span>, data: "rapidocr" },
-                                    { label: <span>On-Device <span style={{ fontSize: "10px", opacity: 0.7 }}>(Google)</span></span>, data: "chromescreenai" },
+                                    { label: <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", width: "100%" }}><span>On-Device <span style={{ fontSize: "10px", opacity: 0.7 }}>(Google)</span></span><span className="dt-recommended-tag" style={{ fontSize: "10px", color: "#9aa0a6", fontStyle: "italic" }}>★ recommended</span></span>, data: "chromescreenai" },
                                     { label: <span>OCR.space</span>, data: "ocrspace" },
-                                    { label: <span>Google Cloud</span>, data: "googlecloud" },
+                                    { label: <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", width: "100%" }}><span>Google Cloud</span><span className="dt-recommended-tag" style={{ fontSize: "10px", color: "#9aa0a6", fontStyle: "italic" }}>★ recommended</span></span>, data: "googlecloud" },
                                     { label: <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>Gemini Vision <BsStars style={{ fontSize: "12px" }} /></span>, data: "gemini_vision" }
                                 ]}
                                 selectedOption={settings.ocrProvider}
@@ -595,6 +597,7 @@ export const TabTranslation: VFC = () => {
                                     }
                                 }}
                             />
+                            </div>
                             {settings.ocrProvider === 'googlecloud' && (
                                 <DialogButton
                                     onClick={() => {
