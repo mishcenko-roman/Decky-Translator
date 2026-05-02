@@ -97,38 +97,10 @@ jobs:
           echo "a1dbc39f9c7b7d4ff3074fa18de66714c4e4400643bd657894a65803b0362a92  dependencies_build/python313/python-3.13.tar.gz" | sha256sum -c
           cd dependencies_build/python313 && tar -xzf python-3.13.tar.gz && rm python-3.13.tar.gz
 
-      - name: Download RapidOCR models
-        run: |
-          mkdir -p dependencies_build/rapidocr/models
-          cd dependencies_build/rapidocr/models
-
-          # Detection model (PP-OCRv5 mobile, shared for all languages)
-          curl -L -o ch_PP-OCRv5_mobile_det.onnx \
-            "https://github.com/MeKo-Christian/paddleocr-onnx/releases/download/v1.0.0/PP-OCRv5_mobile_det.onnx"
-
-          # Chinese rec model (PP-OCRv5 mobile -- also handles Japanese and English)
-          curl -L -o ch_rec.onnx \
-            "https://github.com/MeKo-Christian/paddleocr-onnx/releases/download/v1.0.0/PP-OCRv5_mobile_rec.onnx"
-          curl -L -o ch_dict.txt \
-            "https://huggingface.co/monkt/paddleocr-onnx/resolve/main/languages/chinese/dict.txt"
-
-          # Per-language recognition models from monkt/paddleocr-onnx (PP-OCRv5)
-          MONKT="https://huggingface.co/monkt/paddleocr-onnx/resolve/main/languages"
-          for lang in english latin eslav korean greek thai; do
-            curl -L -o ${lang}_rec.onnx "$MONKT/${lang}/rec.onnx"
-            curl -L -o ${lang}_dict.txt "$MONKT/${lang}/dict.txt"
-          done
-
-          # Text direction classifier (PP-OCRv2, works with v5)
-          curl -L -o ch_ppocr_mobile_v2.0_cls_infer.onnx \
-            "https://huggingface.co/SWHL/RapidOCR/resolve/main/PP-OCRv3/ch_ppocr_mobile_v2.0_cls_train.onnx"
-
-          ls -lh
-
       - name: Create dependencies archive
         run: |
           cd dependencies_build
-          tar -czvf ../plugin-dependencies.tar.gz py_modules python313 rapidocr
+          tar -czvf ../plugin-dependencies.tar.gz py_modules python313
 
       - name: Calculate dependencies SHA256
         id: dependencies_hash

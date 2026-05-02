@@ -21,8 +21,8 @@ logger = logging.getLogger(__name__)
 # Results below this confidence are filtered out
 DEFAULT_MIN_CONFIDENCE = 0.5
 
-# RapidOCR models directory (relative to plugin directory)
-RAPIDOCR_MODELS_DIR = "bin/rapidocr/models"
+# Fallback when no models_dir is provided (tests, older installs).
+LEGACY_MODELS_DIR = "bin/rapidocr/models"
 
 # OCR timeout in seconds (Steam Deck CPU can be slow)
 OCR_TIMEOUT_SECONDS = 120
@@ -94,25 +94,29 @@ class RapidOCRProvider(OCRProvider):
     def __init__(
         self,
         plugin_dir: str = "",
-        min_confidence: float = DEFAULT_MIN_CONFIDENCE
+        min_confidence: float = DEFAULT_MIN_CONFIDENCE,
+        models_dir: str = "",
     ):
         """
         Initialize the RapidOCR provider.
 
         Args:
-            plugin_dir: Path to plugin directory containing bin/rapidocr/models.
-                        If empty, uses DECKY_PLUGIN_DIR environment variable.
+            plugin_dir: Path to plugin directory. If empty, uses DECKY_PLUGIN_DIR
+                        environment variable.
             min_confidence: Minimum confidence threshold (0.0-1.0) for filtering results.
+            models_dir: Where the ONNX models live. ProviderManager passes the
+                        downloader's target dir (settings dir based). Falls back
+                        to the legacy bundled bin/rapidocr/models path so direct
+                        instantiation in tests still works.
         """
         self._plugin_dir = plugin_dir or os.environ.get(
             "DECKY_PLUGIN_DIR",
             "/home/deck/homebrew/plugins/decky-translator"
         )
-        self._models_dir = os.path.join(self._plugin_dir, RAPIDOCR_MODELS_DIR)
+        self._models_dir = models_dir or os.path.join(self._plugin_dir, LEGACY_MODELS_DIR)
         self._min_confidence = max(0.0, min(1.0, min_confidence))
         self._box_thresh = 0.5  # Detection box threshold
         self._unclip_ratio = 1.6  # Box expansion ratio
-        self._available = None  # Lazy availability check
         self._init_error = None  # Store any initialization error
         self._python_path = None  # Path to system Python 3 interpreter
 
@@ -157,11 +161,13 @@ class RapidOCRProvider(OCRProvider):
             logger.warning(self._init_error)
             return False
 
-        # Check for bundled models (det + cls are shared across all languages)
         det_model = os.path.join(self._models_dir, "ch_PP-OCRv5_mobile_det.onnx")
         cls_model = os.path.join(self._models_dir, "ch_ppocr_mobile_v2.0_cls_infer.onnx")
         if not (os.path.exists(det_model) and os.path.exists(cls_model)):
-            self._init_error = "RapidOCR models not found"
+            self._init_error = (
+                "RapidOCR models not downloaded. Open the plugin settings, "
+                "select the RapidOCR provider, and download the models."
+            )
             logger.warning(self._init_error)
             return False
 
@@ -198,12 +204,9 @@ class RapidOCRProvider(OCRProvider):
         Returns:
             True if RapidOCR can handle this language
         """
-        # Lazy availability check
-        if self._available is None:
-            self._available = self._check_availability()
-        if not self._available:
+        # Re-check every call so a fresh model download flips us back to available.
+        if not self._check_availability():
             return False
-        # Check if language is in our supported list
         return language in self.SUPPORTED_LANGUAGES
 
     def get_supported_languages(self) -> List[str]:
@@ -296,10 +299,7 @@ class RapidOCRProvider(OCRProvider):
             "worker_alive": self._is_worker_alive(),
         }
 
-        # Check availability
-        if self._available is None:
-            self._available = self._check_availability()
-        info["available"] = self._available
+        info["available"] = self._check_availability()
 
         # Get RapidOCR version from package metadata (no import needed)
         # Check both locations: bin/py_modules (store install) and py_modules (dev install)
@@ -375,9 +375,7 @@ class RapidOCRProvider(OCRProvider):
             if self._worker_proc is not None and self._worker_proc.poll() is None:
                 return True
 
-            if self._available is None:
-                self._available = self._check_availability()
-            if not self._available or not self._python_path:
+            if not self._check_availability() or not self._python_path:
                 logger.warning("Cannot start RapidOCR worker: provider not available")
                 return False
 
@@ -483,10 +481,7 @@ class RapidOCRProvider(OCRProvider):
         threading.Thread(target=self._warmup_worker, daemon=True).start()
 
     async def recognize(self, image_data: bytes, language: str = "auto") -> List[TextRegion]:
-        # Ensure availability is checked
-        if self._available is None:
-            self._available = self._check_availability()
-        if not self._available:
+        if not self._check_availability():
             logger.error("RapidOCR is not available")
             return []
 

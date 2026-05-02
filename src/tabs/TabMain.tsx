@@ -90,9 +90,9 @@ export const TabMain: VFC<TabMainProps> = ({ logic, overlayVisible, providerStat
     const { settings, updateSetting } = useSettings();
 
     const ocrNeedsDownload =
-        settings.ocrProvider === 'chromescreenai'
-        && !!providerStatus
-        && !providerStatus.chromescreenai_downloaded;
+        !!providerStatus
+        && ((settings.ocrProvider === 'chromescreenai' && !providerStatus.chromescreenai_downloaded)
+            || (settings.ocrProvider === 'rapidocr' && !providerStatus.rapidocr_downloaded));
 
     const translationNeedsDownload =
         settings.ocrProvider !== 'gemini_vision'
@@ -107,7 +107,8 @@ export const TabMain: VFC<TabMainProps> = ({ logic, overlayVisible, providerStat
             return;
         }
         if (ocrNeedsDownload) {
-            onNavigateToTab('translation', 'chromescreenai-action');
+            const target = settings.ocrProvider === 'rapidocr' ? 'rapidocr-action' : 'chromescreenai-action';
+            onNavigateToTab('translation', target);
             return;
         }
         if (translationNeedsDownload) {
@@ -169,14 +170,23 @@ export const TabMain: VFC<TabMainProps> = ({ logic, overlayVisible, providerStat
                                 </div>
                                 {settings.ocrProvider === 'rapidocr' && (
                                     <div style={{ marginLeft: '22px', marginBottom: '6px' }}>
-                                        {providerStatus?.rapidocr_available && (
+                                        {providerStatus?.rapidocr_downloaded && (
                                             <div style={{ color: '#666', fontSize: '10px' }}>
                                                 Installed model: RapidOCR{providerStatus?.rapidocr_info?.version ? ` v${providerStatus.rapidocr_info.version}` : ''}
                                             </div>
                                         )}
                                         <div style={{ color: '#666', fontSize: '10px', display: 'flex', alignItems: 'center' }}>
-                                            <StatusDot ok={!!providerStatus?.rapidocr_available} />
-                                            <span>{providerStatus?.rapidocr_available ? 'Ready' : `Not ready (${providerStatus?.rapidocr_error || 'RapidOCR not initialized'})`}</span>
+                                            {providerStatus?.rapidocr_downloading ? (
+                                                <>
+                                                    <InstallingDot />
+                                                    <span>Installing...</span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <StatusDot ok={!!providerStatus?.rapidocr_downloaded} />
+                                                    <span>{providerStatus?.rapidocr_downloaded ? 'Ready' : 'Not ready (Model not installed)'}</span>
+                                                </>
+                                            )}
                                         </div>
                                     </div>
                                 )}

@@ -310,6 +310,17 @@ function useNllbModelStatus() {
     });
 }
 
+function useRapidOCRStatus() {
+    return useModelDownload({
+        getStatusCall: 'get_rapidocr_models_status',
+        downloadCall: 'download_rapidocr_models',
+        cancelCall: 'cancel_rapidocr_models_download',
+        deleteCall: 'delete_rapidocr_models',
+        clearErrorCall: 'clear_rapidocr_models_error',
+        defaultApproxMb: 75,
+    });
+}
+
 const ModelActionButton: VFC<{
     state: ModelDownloadState;
     actionRef?: RefObject<HTMLDivElement>;
@@ -409,13 +420,16 @@ interface TabTranslationProps {
 export const TabTranslation: VFC<TabTranslationProps> = ({ scrollTarget, onScrolled }) => {
     const { settings, updateSetting } = useSettings();
     const chromescreenaiActionRef = useRef<HTMLDivElement>(null);
+    const rapidocrActionRef = useRef<HTMLDivElement>(null);
     const ct2ActionRef = useRef<HTMLDivElement>(null);
     const csai = useChromeScreenAIStatus();
     const nllb = useNllbModelStatus();
+    const rapidocr = useRapidOCRStatus();
 
     useEffect(() => {
         if (!scrollTarget) return;
         const ref = scrollTarget === 'chromescreenai-action' ? chromescreenaiActionRef
+                  : scrollTarget === 'rapidocr-action' ? rapidocrActionRef
                   : scrollTarget === 'ct2-action' ? ct2ActionRef
                   : null;
 
@@ -499,7 +513,7 @@ export const TabTranslation: VFC<TabTranslationProps> = ({ scrollTarget, onScrol
                                 <style>{`.dt-ocr-dropdown-wrapper .dt-recommended-tag { display: none !important; }`}</style>
                             <Dropdown
                                 rgOptions={[
-                                    { label: <span>On-Device <span style={{ fontSize: "10px", opacity: 0.7 }}>(RapidOCR)</span></span>, data: "rapidocr" },
+                                    { label: <span style={{ display: "flex", alignItems: "center", height: "20px", lineHeight: "20px" }}>On-Device <span style={{ fontSize: "10px", opacity: 0.7, marginLeft: "4px" }}>(RapidOCR)</span></span>, data: "rapidocr" },
                                     { label: <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", width: "100%", height: "20px", lineHeight: "20px" }}><span>On-Device <span style={{ fontSize: "10px", opacity: 0.7 }}>(Chrome)</span></span><span className="dt-recommended-tag" style={{ fontSize: "10px", color: "#9aa0a6", fontStyle: "italic" }}>★ recommended</span></span>, data: "chromescreenai" },
                                     { label: <span>OCR.space</span>, data: "ocrspace" },
                                     { label: <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", width: "100%", height: "20px", lineHeight: "20px" }}><span>Google Cloud</span><span className="dt-recommended-tag" style={{ fontSize: "10px", color: "#9aa0a6", fontStyle: "italic" }}>★ recommended</span></span>, data: "googlecloud" },
@@ -573,6 +587,9 @@ export const TabTranslation: VFC<TabTranslationProps> = ({ scrollTarget, onScrol
                             {settings.ocrProvider === 'chromescreenai' && (
                                 <ModelActionButton state={csai} actionRef={chromescreenaiActionRef} />
                             )}
+                            {settings.ocrProvider === 'rapidocr' && (
+                                <ModelActionButton state={rapidocr} actionRef={rapidocrActionRef} />
+                            )}
                         </Focusable>
                     </Field>
                 </PanelSectionRow>
@@ -592,15 +609,19 @@ export const TabTranslation: VFC<TabTranslationProps> = ({ scrollTarget, onScrol
                         <div style={{ color: "#8b929a", fontSize: "12px", lineHeight: "1.6", paddingLeft: "4px", paddingTop: "4px" }}>
                             {settings.ocrProvider === 'rapidocr' && (
                                 <>
-                                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-                                        <img src={steamdeckLogo} alt="" style={{ height: "18px" }} />
-                                        <span style={{ fontWeight: "bold", color: "#dcdedf" }}>On-Device (RapidOCR)</span>
+                                    <div style={{ display: "inline-flex", flexDirection: "column" }}>
+                                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                            <img src={steamdeckLogo} alt="" style={{ height: "18px" }} />
+                                            <span style={{ fontWeight: "bold", color: "#dcdedf" }}>On-Device (RapidOCR)</span>
+                                        </div>
+                                        <ModelHeadingProgressBar state={rapidocr} />
                                     </div>
+                                    <ModelStatusIndicator state={rapidocr} />
+                                    <ModelDownloadError state={rapidocr} />
                                     <ProviderRating quality={1} speed={1} />
-                                    <div>- Offline recognition, no internet required</div>
+                                    <div>- Offline and privacy-friendly text recognition</div>
+                                    <div>- Requires 75MB one-time model download</div>
                                     <div>- Customizable parameters</div>
-                                    <div>- Screenshots do not leave your device</div>
-                                    <div>- Experimental support</div>
                                 </>
                             )}
                             {settings.ocrProvider === 'chromescreenai' && (

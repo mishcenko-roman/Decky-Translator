@@ -1521,6 +1521,9 @@ class Plugin:
             if self._ocr_provider == "chromescreenai" and not self._provider_manager.is_chromescreenai_downloaded():
                 return {"error": "model_not_available", "message": "Chrome Screen AI engine not downloaded.\nDownload it in plugin settings"}
 
+            if self._ocr_provider == "rapidocr" and not self._provider_manager.is_rapidocr_models_downloaded():
+                return {"error": "model_not_available", "message": "RapidOCR model not downloaded.\nDownload it in plugin settings"}
+
             # If using Gemini Vision, set the target language before OCR
             # so it can translate in the same API call
             if self._ocr_provider == "gemini_vision":
@@ -1879,6 +1882,55 @@ class Plugin:
             logger.error(f"Error deleting Chrome Screen AI files: {e}")
             return False
 
+    # -- RapidOCR model download API --
+
+    async def get_rapidocr_models_status(self):
+        try:
+            if not self._provider_manager:
+                return {"downloaded": False, "size": 0, "approx_size_mb": 75,
+                        "downloading": False, "progress": 0, "error": None}
+            return self._provider_manager.get_rapidocr_models_status()
+        except Exception as e:
+            logger.error(f"Error getting RapidOCR models status: {e}")
+            return {"downloaded": False, "size": 0, "approx_size_mb": 75,
+                    "downloading": False, "progress": 0, "error": str(e)}
+
+    async def download_rapidocr_models(self):
+        try:
+            if not self._provider_manager:
+                return False
+            return self._provider_manager.download_rapidocr_models()
+        except Exception as e:
+            logger.error(f"Error starting RapidOCR models download: {e}")
+            return False
+
+    async def cancel_rapidocr_models_download(self):
+        try:
+            if self._provider_manager:
+                self._provider_manager.cancel_rapidocr_models_download()
+            return True
+        except Exception as e:
+            logger.error(f"Error cancelling RapidOCR models download: {e}")
+            return False
+
+    async def clear_rapidocr_models_error(self):
+        try:
+            if self._provider_manager:
+                self._provider_manager.clear_rapidocr_models_error()
+            return True
+        except Exception as e:
+            logger.error(f"Error clearing RapidOCR models error: {e}")
+            return False
+
+    async def delete_rapidocr_models(self):
+        try:
+            if not self._provider_manager:
+                return False
+            return self._provider_manager.delete_rapidocr_models()
+        except Exception as e:
+            logger.error(f"Error deleting RapidOCR models: {e}")
+            return False
+
     async def _main(self):
         logger.info("Plugin initialization started")
         try:
@@ -1953,6 +2005,11 @@ class Plugin:
             screenai_models_dir = os.path.join(settingsDir, "decky-translator", "models")
             os.makedirs(screenai_models_dir, exist_ok=True)
 
+            # RapidOCR models download into the same parent dir as NLLB and
+            # Chrome Screen AI so they all persist across plugin updates.
+            rapidocr_models_dir = os.path.join(settingsDir, "decky-translator", "models")
+            os.makedirs(rapidocr_models_dir, exist_ok=True)
+
             # Initialize provider manager
             self._provider_manager = ProviderManager()
             self._provider_manager.configure(
@@ -1963,6 +2020,7 @@ class Plugin:
                 translation_provider=self._translation_provider,
                 ct2_models_dir=ct2_models_dir,
                 screenai_models_dir=screenai_models_dir,
+                rapidocr_models_dir=rapidocr_models_dir,
             )
 
             # Load and apply RapidOCR-specific settings

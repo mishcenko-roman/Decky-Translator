@@ -25,6 +25,7 @@ from .gemini_vision import GeminiVisionProvider
 from .ct2_translate import CT2TranslateProvider
 from .model_manager import ModelManager
 from .screenai_downloader import ScreenAIDownloader
+from .rapidocr_downloader import RapidOCRDownloader
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +53,7 @@ __all__ = [
     'CT2TranslateProvider',
     'ModelManager',
     'ScreenAIDownloader',
+    'RapidOCRDownloader',
     'ProviderManager',
 ]
 
@@ -86,6 +88,9 @@ class ProviderManager:
         # Created on first configure() that supplies screenai_models_dir.
         self._screenai_downloader: Optional[ScreenAIDownloader] = None
 
+        # Created on first configure() that supplies rapidocr_models_dir.
+        self._rapidocr_downloader: Optional[RapidOCRDownloader] = None
+
         self._reachability_cache: dict = {}
 
         logger.debug("ProviderManager initialized")
@@ -99,6 +104,7 @@ class ProviderManager:
         translation_provider: str = "",
         ct2_models_dir: str = "",
         screenai_models_dir: str = "",
+        rapidocr_models_dir: str = "",
     ) -> None:
         """
         Configure provider preferences.
@@ -118,6 +124,8 @@ class ProviderManager:
                 self._model_manager = ModelManager(ct2_models_dir)
         if screenai_models_dir and not self._screenai_downloader:
             self._screenai_downloader = ScreenAIDownloader(screenai_models_dir)
+        if rapidocr_models_dir and not self._rapidocr_downloader:
+            self._rapidocr_downloader = RapidOCRDownloader(rapidocr_models_dir)
         self._google_api_key = google_api_key
         self._gemini_api_key = gemini_api_key
 
@@ -302,8 +310,13 @@ class ProviderManager:
 
         if provider_type not in self._ocr_providers:
             if provider_type == ProviderType.RAPIDOCR:
+                models_dir = (
+                    self._rapidocr_downloader.get_target_dir()
+                    if self._rapidocr_downloader else ""
+                )
                 provider = RapidOCRProvider(
-                    min_confidence=self._rapidocr_confidence
+                    min_confidence=self._rapidocr_confidence,
+                    models_dir=models_dir,
                 )
                 provider.set_box_thresh(self._rapidocr_box_thresh)
                 provider.set_unclip_ratio(self._rapidocr_unclip_ratio)
@@ -453,7 +466,14 @@ class ProviderManager:
         rapidocr = self._ocr_providers.get(ProviderType.RAPIDOCR)
         if rapidocr is None:
             # Create temporarily to check availability
-            rapidocr = RapidOCRProvider(min_confidence=self._rapidocr_confidence)
+            models_dir = (
+                self._rapidocr_downloader.get_target_dir()
+                if self._rapidocr_downloader else ""
+            )
+            rapidocr = RapidOCRProvider(
+                min_confidence=self._rapidocr_confidence,
+                models_dir=models_dir,
+            )
         status["rapidocr_available"] = rapidocr.is_available()
         status["rapidocr_languages"] = rapidocr.get_supported_languages() if rapidocr.is_available() else []
         status["rapidocr_info"] = rapidocr.get_rapidocr_info()
@@ -461,6 +481,7 @@ class ProviderManager:
 
         status["nllb_downloaded"] = self.is_nllb_model_downloaded()
         status["chromescreenai_downloaded"] = self.is_chromescreenai_downloaded()
+        status["rapidocr_downloaded"] = self.is_rapidocr_models_downloaded()
 
         nllb_dl = self._model_manager.get_download_status() if self._model_manager else {}
         status["nllb_downloading"] = bool(nllb_dl.get("downloading"))
@@ -469,6 +490,10 @@ class ProviderManager:
         scai_dl = self._screenai_downloader.get_status() if self._screenai_downloader else {}
         status["chromescreenai_downloading"] = bool(scai_dl.get("downloading"))
         status["chromescreenai_progress"] = float(scai_dl.get("progress") or 0)
+
+        rapidocr_dl = self._rapidocr_downloader.get_status() if self._rapidocr_downloader else {}
+        status["rapidocr_downloading"] = bool(rapidocr_dl.get("downloading"))
+        status["rapidocr_progress"] = float(rapidocr_dl.get("progress") or 0)
 
         return status
 
@@ -611,6 +636,44 @@ class ProviderManager:
         # Drop the cached provider so it re-checks availability after delete.
         self._ocr_providers.pop(ProviderType.CHROME_SCREEN_AI, None)
         return self._screenai_downloader.delete()
+
+    # -- RapidOCR model download management --
+
+    def is_rapidocr_models_downloaded(self) -> bool:
+        if self._rapidocr_downloader:
+            return self._rapidocr_downloader.is_installed()
+        return False
+
+    def get_rapidocr_models_status(self) -> dict:
+        if not self._rapidocr_downloader:
+            return {
+                "downloaded": False, "size": 0, "approx_size_mb": 75,
+                "downloading": False, "progress": 0, "error": None,
+            }
+        return self._rapidocr_downloader.get_status()
+
+    def download_rapidocr_models(self) -> bool:
+        if self._rapidocr_downloader:
+            return self._rapidocr_downloader.start_download()
+        return False
+
+    def cancel_rapidocr_models_download(self) -> None:
+        if self._rapidocr_downloader:
+            self._rapidocr_downloader.cancel_download()
+
+    def clear_rapidocr_models_error(self) -> None:
+        if self._rapidocr_downloader:
+            self._rapidocr_downloader.clear_error()
+
+    def delete_rapidocr_models(self) -> bool:
+        if not self._rapidocr_downloader:
+            return False
+        provider = self._ocr_providers.get(ProviderType.RAPIDOCR)
+        if provider and hasattr(provider, 'stop_worker'):
+            provider.stop_worker()
+        # Drop the cached provider so it re-checks availability after delete.
+        self._ocr_providers.pop(ProviderType.RAPIDOCR, None)
+        return self._rapidocr_downloader.delete()
 
     def shutdown(self):
         ct2 = self._translation_providers.get(ProviderType.CT2)
