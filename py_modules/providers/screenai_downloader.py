@@ -1,5 +1,5 @@
 # Fetches libchromescreenai.so + TFLite models from Google's CIPD server.
-# Threading and progress shape mirror ModelManager so the UI treats both alike.
+# Threading and progress shape mirror NLLBDownloader so the UI treats both alike.
 
 import json
 import logging

@@ -11,7 +11,7 @@ import unicodedata
 from typing import List, Optional
 
 from .base import TranslationProvider, ProviderType
-from .model_manager import NLLB_LANG_MAP, ModelManager
+from .nllb_downloader import NLLB_LANG_MAP, NLLBDownloader
 from . import python_runtime
 
 logger = logging.getLogger(__name__)
@@ -160,7 +160,7 @@ class CT2TranslateProvider(TranslationProvider):
 
     SUPPORTED_LANGUAGES = list(NLLB_LANG_MAP.keys())
 
-    def __init__(self, model_manager: ModelManager, plugin_dir: str = ""):
+    def __init__(self, model_manager: NLLBDownloader, plugin_dir: str = ""):
         self._model_manager = model_manager
         self._plugin_dir = plugin_dir or os.environ.get(
             "DECKY_PLUGIN_DIR",

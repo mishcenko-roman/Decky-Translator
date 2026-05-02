@@ -1,4 +1,4 @@
-# providers/model_manager.py
+# providers/nllb_downloader.py
 # Manages NLLB-200 model download, storage, and lifecycle
 
 import logging
@@ -54,7 +54,7 @@ MODEL_APPROX_MB = 1410
 LEGACY_MODEL_DIRS = ["nllb-200-distilled-600M"]
 
 
-class ModelManager:
+class NLLBDownloader:
     """Manages the single NLLB model download and storage."""
 
     def __init__(self, models_dir: str):

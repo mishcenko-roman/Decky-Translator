@@ -23,7 +23,7 @@ from .rapidocr_provider import RapidOCRProvider
 from .chromescreenai_provider import ChromeScreenAIProvider
 from .gemini_vision import GeminiVisionProvider
 from .ct2_translate import CT2TranslateProvider
-from .model_manager import ModelManager
+from .nllb_downloader import NLLBDownloader
 from .screenai_downloader import ScreenAIDownloader
 from .rapidocr_downloader import RapidOCRDownloader
 
@@ -51,7 +51,7 @@ __all__ = [
     'ChromeScreenAIProvider',
     'GeminiVisionProvider',
     'CT2TranslateProvider',
-    'ModelManager',
+    'NLLBDownloader',
     'ScreenAIDownloader',
     'RapidOCRDownloader',
     'ProviderManager',
@@ -121,7 +121,7 @@ class ProviderManager:
         if ct2_models_dir:
             self._ct2_models_dir = ct2_models_dir
             if not self._model_manager:
-                self._model_manager = ModelManager(ct2_models_dir)
+                self._model_manager = NLLBDownloader(ct2_models_dir)
         if screenai_models_dir and not self._screenai_downloader:
             self._screenai_downloader = ScreenAIDownloader(screenai_models_dir)
         if rapidocr_models_dir and not self._rapidocr_downloader:

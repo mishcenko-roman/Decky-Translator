@@ -1,5 +1,5 @@
 # Fetches RapidOCR ONNX models + dicts from upstream sources.
-# Threading and progress shape mirror ModelManager so the UI treats all three downloaders alike.
+# Threading and progress shape mirror NLLBDownloader so the UI treats all three downloaders alike.
 
 import logging
 import os
