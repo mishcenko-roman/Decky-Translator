@@ -208,20 +208,44 @@ const GeminiModelSelector: VFC<{
     );
 };
 
-// Mirrors CT2ModelManager but for the Chrome Screen AI engine.
-const ChromeScreenAIManager: VFC<{ actionRef?: RefObject<HTMLDivElement> }> = ({ actionRef }) => {
+type ModelDownloadState = {
+    status: any;
+    isDownloading: boolean;
+    isDownloaded: boolean;
+    progressPct: number;
+    statusColor: string;
+    statusText: string;
+    ActionIcon: typeof HiInboxArrowDown;
+    onActionClick: () => void;
+};
+
+function formatApproxSize(mb: number): string {
+    if (mb >= 1000) {
+        return `${(mb / 1024).toFixed(1)} GB`;
+    }
+    return `${Math.round(mb)} MB`;
+}
+
+function useModelDownload(opts: {
+    getStatusCall: string;
+    downloadCall: string;
+    cancelCall: string;
+    deleteCall: string;
+    clearErrorCall: string;
+    defaultApproxMb: number;
+}): ModelDownloadState {
     const [status, setStatus] = useState<any>({
-        downloaded: false, size: 0, approx_size_mb: 120,
+        downloaded: false, size: 0, approx_size_mb: opts.defaultApproxMb,
         downloading: false, progress: 0, error: null,
     });
     const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     const refresh = useCallback(async () => {
         try {
-            const s = await call<[], any>('get_chromescreenai_status');
+            const s = await call<[], any>(opts.getStatusCall);
             if (s) setStatus(s);
         } catch (e) { /* ignore */ }
-    }, []);
+    }, [opts.getStatusCall]);
 
     useEffect(() => { refresh(); }, []);
 
@@ -238,261 +262,126 @@ const ChromeScreenAIManager: VFC<{ actionRef?: RefObject<HTMLDivElement> }> = ({
     }, [status.downloading, refresh]);
 
     const handleDownload = async () => {
-        await call('clear_chromescreenai_error');
-        const started = await call<[], boolean>('download_chromescreenai');
+        await call(opts.clearErrorCall);
+        const started = await call<[], boolean>(opts.downloadCall);
         if (started) {
             setStatus((prev: any) => ({ ...prev, downloading: true, progress: 0, error: null }));
         }
     };
-    const handleCancel = async () => { await call('cancel_chromescreenai_download'); };
-    const handleDelete = async () => { await call('delete_chromescreenai'); refresh(); };
+    const handleCancel = async () => { await call(opts.cancelCall); };
+    const handleDelete = async () => { await call(opts.deleteCall); refresh(); };
 
     const isDownloading = status.downloading;
     const isDownloaded = status.downloaded;
     const progressPct = Math.round((status.progress || 0) * 100);
     const statusColor = isDownloading ? "#ffa726" : isDownloaded ? "#4caf50" : "#ff6b6b";
     const installedSize = status.size ? ` (${formatBytes(status.size)})` : '';
-    const approxSize = status.approx_size_mb ? ` (${Math.round(status.approx_size_mb)} MB)` : '';
+    const approxSize = status.approx_size_mb ? ` (${formatApproxSize(status.approx_size_mb)})` : '';
     const statusText = isDownloading
         ? `downloading ${progressPct}%`
         : isDownloaded
-            ? `ready${installedSize}`
-            : `not installed${approxSize}`;
+            ? `Installed${installedSize}`
+            : `Not installed${approxSize}`;
     const ActionIcon = isDownloading ? HiXMark : isDownloaded ? HiTrash : HiInboxArrowDown;
     const onActionClick = isDownloading ? handleCancel : isDownloaded ? handleDelete : handleDownload;
 
-    return (
-        <>
-            <PanelSectionRow>
-                <Focusable style={{
-                    display: "flex",
-                    flexDirection: "row",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: "12px",
-                    padding: "8px 0px",
-                    width: "100%",
-                }}>
-                    <div style={{ flex: 1, minWidth: 0, paddingLeft: '3px' }}>
-                        <div>Chrome Screen AI</div>
-                        <div style={{
-                            fontSize: "11px",
-                            color: "#888",
-                            fontWeight: "normal",
-                            marginTop: "2px",
-                            whiteSpace: "nowrap",
-                        }}>
-                            offline OCR engine
-                        </div>
-                        <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "4px" }}>
-                            <div style={{
-                                width: "8px",
-                                height: "8px",
-                                borderRadius: "50%",
-                                backgroundColor: statusColor,
-                                flexShrink: 0,
-                            }} />
-                            <span style={{ fontSize: "11px", color: statusColor, fontWeight: "normal" }}>
-                                {statusText}
-                            </span>
-                        </div>
-                        {status.error && !isDownloading && (
-                            <div style={{
-                                fontSize: "11px",
-                                color: "#ff6b6b",
-                                marginTop: "2px",
-                                whiteSpace: "normal",
-                                wordBreak: "break-word",
-                            }}>
-                                {status.error}
-                            </div>
-                        )}
-                        {isDownloading && (
-                            <div style={{
-                                marginTop: "4px",
-                                height: "3px",
-                                backgroundColor: "rgba(255,255,255,0.1)",
-                                borderRadius: "2px",
-                                overflow: "hidden",
-                            }}>
-                                <div style={{
-                                    width: `${progressPct}%`,
-                                    height: "100%",
-                                    backgroundColor: statusColor,
-                                    borderRadius: "2px",
-                                    transition: "width 0.3s ease",
-                                }} />
-                            </div>
-                        )}
-                    </div>
-                    <DialogButton
-                        ref={actionRef}
-                        onClick={onActionClick}
-                        style={{ minWidth: "40px", width: "40px", padding: "10px 0", flexShrink: 0 }}
-                    >
-                        <ActionIcon size={20} />
-                    </DialogButton>
-                </Focusable>
-            </PanelSectionRow>
+    return { status, isDownloading, isDownloaded, progressPct, statusColor, statusText, ActionIcon, onActionClick };
+}
 
-            <div style={{ height: "1px", backgroundColor: "rgba(255,255,255,0.08)" }} />
-        </>
-    );
-};
-
-// NLLB Model Management Component
-const CT2ModelManager: VFC<{ actionRef?: RefObject<HTMLDivElement> }> = ({ actionRef }) => {
-    const { settings } = useSettings();
-    const [modelStatus, setModelStatus] = useState<any>({
-        downloaded: false, size: 0, approx_size_mb: 1410,
-        downloading: false, progress: 0, error: null,
+function useChromeScreenAIStatus() {
+    return useModelDownload({
+        getStatusCall: 'get_chromescreenai_status',
+        downloadCall: 'download_chromescreenai',
+        cancelCall: 'cancel_chromescreenai_download',
+        deleteCall: 'delete_chromescreenai',
+        clearErrorCall: 'clear_chromescreenai_error',
+        defaultApproxMb: 120,
     });
-    const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+}
 
-    const refreshStatus = useCallback(async () => {
-        try {
-            const status = await call<[], any>('get_nllb_model_status');
-            if (status) setModelStatus(status);
-        } catch (e) { /* ignore */ }
-    }, []);
+function useNllbModelStatus() {
+    return useModelDownload({
+        getStatusCall: 'get_nllb_model_status',
+        downloadCall: 'download_nllb_model',
+        cancelCall: 'cancel_nllb_download',
+        deleteCall: 'delete_nllb_model',
+        clearErrorCall: 'clear_nllb_model_error',
+        defaultApproxMb: 1410,
+    });
+}
 
-    useEffect(() => { refreshStatus(); }, []);
-
-    // Poll while downloading
-    useEffect(() => {
-        if (modelStatus.downloading) {
-            pollRef.current = setInterval(refreshStatus, 500);
-        } else {
-            if (pollRef.current) {
-                clearInterval(pollRef.current);
-                pollRef.current = null;
-            }
-        }
-        return () => {
-            if (pollRef.current) clearInterval(pollRef.current);
-        };
-    }, [modelStatus.downloading, refreshStatus]);
-
-    const handleDownload = async () => {
-        await call('clear_nllb_model_error');
-        const started = await call<[], boolean>('download_nllb_model');
-        if (started) {
-            setModelStatus((prev: any) => ({ ...prev, downloading: true, progress: 0, error: null }));
-        }
-    };
-
-    const handleCancel = async () => {
-        await call('cancel_nllb_download');
-    };
-
-    const handleDelete = async () => {
-        await call('delete_nllb_model');
-        refreshStatus();
-    };
-
-    const isAutoDetect = settings.inputLanguage === 'auto' || settings.inputLanguage === '';
-    const isDownloading = modelStatus.downloading;
-    const isDownloaded = modelStatus.downloaded;
-
-    const progressPct = Math.round((modelStatus.progress || 0) * 100);
-    const statusColor = isDownloading ? "#ffa726" : isDownloaded ? "#4caf50" : "#ff6b6b";
-    const installedSize = modelStatus.size ? ` (${formatBytes(modelStatus.size)})` : '';
-    const approxSize = modelStatus.approx_size_mb ? ` (${Math.round(modelStatus.approx_size_mb)} MB)` : '';
-    const statusText = isDownloading
-        ? `downloading ${progressPct}%`
-        : isDownloaded
-            ? `ready${installedSize}`
-            : `not installed${approxSize}`;
-    const ActionIcon = isDownloading ? HiXMark : isDownloaded ? HiTrash : HiInboxArrowDown;
-    const onActionClick = isDownloading ? handleCancel : isDownloaded ? handleDelete : handleDownload;
-
+const ModelActionButton: VFC<{
+    state: ModelDownloadState;
+    actionRef?: RefObject<HTMLDivElement>;
+}> = ({ state, actionRef }) => {
+    const { ActionIcon, onActionClick } = state;
     return (
-        <>
-            <PanelSectionRow>
-                <Focusable style={{
-                    display: "flex",
-                    flexDirection: "row",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: "12px",
-                    padding: "8px 0px",
-                    width: "100%",
-                }}>
-                    <div style={{ flex: 1, minWidth: 0, paddingLeft: '3px' }}>
-                        <div>NLLB-200 1.3B</div>
-                        <div style={{
-                            fontSize: "11px",
-                            color: "#888",
-                            fontWeight: "normal",
-                            marginTop: "2px",
-                            whiteSpace: "nowrap",
-                        }}>
-                            offline language model
-                        </div>
-                        <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "4px" }}>
-                            <div style={{
-                                width: "8px",
-                                height: "8px",
-                                borderRadius: "50%",
-                                backgroundColor: statusColor,
-                                flexShrink: 0,
-                            }} />
-                            <span style={{ fontSize: "11px", color: statusColor, fontWeight: "normal" }}>
-                                {statusText}
-                            </span>
-                        </div>
-                        {modelStatus.error && !isDownloading && (
-                            <div style={{
-                                fontSize: "11px",
-                                color: "#ff6b6b",
-                                marginTop: "2px",
-                                whiteSpace: "normal",
-                                wordBreak: "break-word",
-                            }}>
-                                {modelStatus.error}
-                            </div>
-                        )}
-                        {isDownloading && (
-                            <div style={{
-                                marginTop: "4px",
-                                height: "3px",
-                                backgroundColor: "rgba(255,255,255,0.1)",
-                                borderRadius: "2px",
-                                overflow: "hidden",
-                            }}>
-                                <div style={{
-                                    width: `${progressPct}%`,
-                                    height: "100%",
-                                    backgroundColor: statusColor,
-                                    borderRadius: "2px",
-                                    transition: "width 0.3s ease",
-                                }} />
-                            </div>
-                        )}
-                    </div>
-                    <DialogButton
-                        ref={actionRef}
-                        onClick={onActionClick}
-                        style={{ minWidth: "40px", width: "40px", padding: "10px 0", flexShrink: 0 }}
-                    >
-                        <ActionIcon size={20} />
-                    </DialogButton>
-                </Focusable>
-            </PanelSectionRow>
-
-            {isAutoDetect && (
-                <PanelSectionRow>
-                    <Field focusable={true} childrenContainerWidth="max">
-                        <div style={{ color: "#ffa726", fontSize: "12px", lineHeight: "1.5" }}>
-                            Offline translation needs a specific source language. Select one in the Languages section above.
-                        </div>
-                    </Field>
-                </PanelSectionRow>
-            )}
-            <div style={{ height: "1px", backgroundColor: "rgba(255,255,255,0.08)" }} />
-        </>
+        <DialogButton
+            ref={actionRef}
+            onClick={onActionClick}
+            style={{ minWidth: "40px", width: "40px", padding: "10px 0" }}
+        >
+            <ActionIcon />
+        </DialogButton>
     );
 };
+
+const ModelStatusIndicator: VFC<{ state: ModelDownloadState }> = ({ state }) => (
+    <div style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "6px",
+        marginBottom: "6px",
+        marginLeft: "26px",
+        fontSize: "11px",
+    }}>
+        <div style={{
+            width: "6px",
+            height: "6px",
+            borderRadius: "50%",
+            backgroundColor: state.statusColor,
+            flexShrink: 0,
+        }} />
+        <span style={{ color: state.statusColor }}>{state.statusText}</span>
+    </div>
+);
+
+const ModelHeadingProgressBar: VFC<{ state: ModelDownloadState }> = ({ state }) => (
+    state.isDownloading ? (
+        <div style={{
+            marginTop: "2px",
+            marginBottom: "4px",
+            marginLeft: "26px",
+            height: "2px",
+            backgroundColor: "rgba(255,255,255,0.1)",
+            borderRadius: "2px",
+            overflow: "hidden",
+        }}>
+            <div style={{
+                width: `${state.progressPct}%`,
+                height: "100%",
+                backgroundColor: state.statusColor,
+                borderRadius: "2px",
+                transition: "width 0.3s ease",
+            }} />
+        </div>
+    ) : null
+);
+
+const ModelDownloadError: VFC<{ state: ModelDownloadState }> = ({ state }) => (
+    state.status.error && !state.isDownloading ? (
+        <div style={{
+            color: "#ff6b6b",
+            fontSize: "11px",
+            marginTop: "6px",
+            marginBottom: "4px",
+            whiteSpace: "normal",
+            wordBreak: "break-word",
+        }}>
+            {state.status.error}
+        </div>
+    ) : null
+);
 
 const StarRating: VFC<{ label: string; filled: number; total?: number }> = ({ label, filled, total = 3 }) => (
     <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
@@ -521,6 +410,8 @@ export const TabTranslation: VFC<TabTranslationProps> = ({ scrollTarget, onScrol
     const { settings, updateSetting } = useSettings();
     const chromescreenaiActionRef = useRef<HTMLDivElement>(null);
     const ct2ActionRef = useRef<HTMLDivElement>(null);
+    const csai = useChromeScreenAIStatus();
+    const nllb = useNllbModelStatus();
 
     useEffect(() => {
         if (!scrollTarget) return;
@@ -609,10 +500,10 @@ export const TabTranslation: VFC<TabTranslationProps> = ({ scrollTarget, onScrol
                             <Dropdown
                                 rgOptions={[
                                     { label: <span>On-Device <span style={{ fontSize: "10px", opacity: 0.7 }}>(RapidOCR)</span></span>, data: "rapidocr" },
-                                    { label: <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", width: "100%" }}><span>On-Device <span style={{ fontSize: "10px", opacity: 0.7 }}>(Google)</span></span><span className="dt-recommended-tag" style={{ fontSize: "10px", color: "#9aa0a6", fontStyle: "italic" }}>★ recommended</span></span>, data: "chromescreenai" },
+                                    { label: <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", width: "100%", height: "20px", lineHeight: "20px" }}><span>On-Device <span style={{ fontSize: "10px", opacity: 0.7 }}>(Google)</span></span><span className="dt-recommended-tag" style={{ fontSize: "10px", color: "#9aa0a6", fontStyle: "italic" }}>★ recommended</span></span>, data: "chromescreenai" },
                                     { label: <span>OCR.space</span>, data: "ocrspace" },
-                                    { label: <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", width: "100%" }}><span>Google Cloud</span><span className="dt-recommended-tag" style={{ fontSize: "10px", color: "#9aa0a6", fontStyle: "italic" }}>★ recommended</span></span>, data: "googlecloud" },
-                                    { label: <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>Gemini Vision <BsStars style={{ fontSize: "12px" }} /></span>, data: "gemini_vision" }
+                                    { label: <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", width: "100%", height: "20px", lineHeight: "20px" }}><span>Google Cloud</span><span className="dt-recommended-tag" style={{ fontSize: "10px", color: "#9aa0a6", fontStyle: "italic" }}>★ recommended</span></span>, data: "googlecloud" },
+                                    { label: <span style={{ display: "flex", alignItems: "center", gap: "6px", height: "20px", lineHeight: "20px" }}>Gemini Vision <BsStars style={{ fontSize: "12px" }} /></span>, data: "gemini_vision" }
                                 ]}
                                 selectedOption={settings.ocrProvider}
                                 onChange={(option) => {
@@ -679,6 +570,9 @@ export const TabTranslation: VFC<TabTranslationProps> = ({ scrollTarget, onScrol
                                     </div>
                                 </DialogButton>
                             )}
+                            {settings.ocrProvider === 'chromescreenai' && (
+                                <ModelActionButton state={csai} actionRef={chromescreenaiActionRef} />
+                            )}
                         </Focusable>
                     </Field>
                 </PanelSectionRow>
@@ -689,16 +583,13 @@ export const TabTranslation: VFC<TabTranslationProps> = ({ scrollTarget, onScrol
                         onChange={(model) => updateSetting('geminiModel', model, 'Gemini model')}
                     />
                 )}
-                {settings.ocrProvider === 'chromescreenai' && (
-                    <ChromeScreenAIManager actionRef={chromescreenaiActionRef} />
-                )}
                 <PanelSectionRow>
                     <Field
                         focusable={true}
                         childrenContainerWidth="max"
                         childrenLayout="below"
                     >
-                        <div style={{ color: "#8b929a", fontSize: "12px", lineHeight: "1.6" }}>
+                        <div style={{ color: "#8b929a", fontSize: "12px", lineHeight: "1.6", paddingLeft: "4px", paddingTop: "4px" }}>
                             {settings.ocrProvider === 'rapidocr' && (
                                 <>
                                     <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
@@ -714,13 +605,17 @@ export const TabTranslation: VFC<TabTranslationProps> = ({ scrollTarget, onScrol
                             )}
                             {settings.ocrProvider === 'chromescreenai' && (
                                 <>
-                                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-                                        <img src={chromeLogo} alt="" style={{ height: "18px" }} />
-                                        <span style={{ fontWeight: "bold", color: "#dcdedf" }}>On-Device (Chrome Screen AI)</span>
+                                    <div style={{ display: "inline-flex", flexDirection: "column" }}>
+                                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                            <img src={chromeLogo} alt="" style={{ height: "18px" }} />
+                                            <span style={{ fontWeight: "bold", color: "#dcdedf" }}>On-Device (Chrome Screen AI)</span>
+                                        </div>
+                                        <ModelHeadingProgressBar state={csai} />
                                     </div>
+                                    <ModelStatusIndicator state={csai} />
+                                    <ModelDownloadError state={csai} />
                                     <ProviderRating quality={3} speed={2} />
                                     <div>- Offline text recognition by Google</div>
-                                    <div>- 120 MB one-time download required</div>
                                     <div>- Auto-detects 70+ languages</div>
                                     <div style={{ marginTop: "6px", fontStyle: "italic", color: "#5f6268", fontSize: "10px" }}>
                                         Downloaded on demand from Google's public server
@@ -898,7 +793,7 @@ export const TabTranslation: VFC<TabTranslationProps> = ({ scrollTarget, onScrol
                         {settings.ocrProvider === 'gemini_vision' ? (
                             <Dropdown
                                 rgOptions={[
-                                    { label: <span style={{ display: "flex", alignItems: "center", gap: "6px" }}><HiLockClosed style={{ fontSize: "12px", color: "#888" }} /> Gemini Vision <BsStars style={{ fontSize: "12px" }} /></span>, data: "gemini_vision" }
+                                    { label: <span style={{ display: "flex", alignItems: "center", gap: "6px", height: "20px", lineHeight: "20px" }}><HiLockClosed style={{ fontSize: "12px", color: "#888" }} /> Gemini Vision <BsStars style={{ fontSize: "12px" }} /></span>, data: "gemini_vision" }
                                 ]}
                                 selectedOption="gemini_vision"
                                 disabled={true}
@@ -945,14 +840,13 @@ export const TabTranslation: VFC<TabTranslationProps> = ({ scrollTarget, onScrol
                                     </div>
                                 </DialogButton>
                             )}
+                            {settings.translationProvider === 'ct2' && (
+                                <ModelActionButton state={nllb} actionRef={ct2ActionRef} />
+                            )}
                         </Focusable>
                         )}
                     </Field>
                 </PanelSectionRow>
-
-                {settings.ocrProvider !== 'gemini_vision' && settings.translationProvider === 'ct2' && (
-                    <CT2ModelManager actionRef={ct2ActionRef} />
-                )}
 
                 <PanelSectionRow>
                     <Field
@@ -960,7 +854,7 @@ export const TabTranslation: VFC<TabTranslationProps> = ({ scrollTarget, onScrol
                         childrenContainerWidth="max"
                         childrenLayout="below"
                     >
-                        <div style={{ color: "#8b929a", fontSize: "12px", lineHeight: "1.6" }}>
+                        <div style={{ color: "#8b929a", fontSize: "12px", lineHeight: "1.6", paddingLeft: "4px", paddingTop: "4px" }}>
                             {settings.ocrProvider === 'gemini_vision' && (
                                 <>
                                     <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
@@ -999,17 +893,26 @@ export const TabTranslation: VFC<TabTranslationProps> = ({ scrollTarget, onScrol
                             )}
                             {settings.ocrProvider !== 'gemini_vision' && settings.translationProvider === 'ct2' && (
                                 <>
-                                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-                                        <img src={steamdeckLogo} alt="" style={{ height: "18px" }} />
-                                        <span style={{ fontWeight: "bold", color: "#dcdedf" }}>On-Device (NLLB)</span>
+                                    <div style={{ display: "inline-flex", flexDirection: "column" }}>
+                                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                            <img src={steamdeckLogo} alt="" style={{ height: "18px" }} />
+                                            <span style={{ fontWeight: "bold", color: "#dcdedf" }}>On-Device (NLLB)</span>
+                                        </div>
+                                        <ModelHeadingProgressBar state={nllb} />
                                     </div>
+                                    <ModelStatusIndicator state={nllb} />
+                                    <ModelDownloadError state={nllb} />
                                     <ProviderRating quality={1} speed={1} />
                                     <div>- Offline translation</div>
                                     <div>- Privacy-friendly</div>
-                                    <div>- One-time ~1.4 GB download required</div>
                                     <div>- Single model covers most languages</div>
                                     <div>- Language auto-detect not supported</div>
                                     <div>- Experimental support</div>
+                                    {(settings.inputLanguage === 'auto' || settings.inputLanguage === '') && (
+                                        <div style={{ color: "#ffa726", marginTop: "6px" }}>
+                                            Offline translation needs a specific source language. Select one in the Languages section above.
+                                        </div>
+                                    )}
                                 </>
                             )}
                         </div>
