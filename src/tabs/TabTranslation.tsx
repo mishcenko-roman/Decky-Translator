@@ -500,7 +500,7 @@ export const TabTranslation: VFC<TabTranslationProps> = ({ scrollTarget, onScrol
                             <Dropdown
                                 rgOptions={[
                                     { label: <span>On-Device <span style={{ fontSize: "10px", opacity: 0.7 }}>(RapidOCR)</span></span>, data: "rapidocr" },
-                                    { label: <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", width: "100%", height: "20px", lineHeight: "20px" }}><span>On-Device <span style={{ fontSize: "10px", opacity: 0.7 }}>(Google)</span></span><span className="dt-recommended-tag" style={{ fontSize: "10px", color: "#9aa0a6", fontStyle: "italic" }}>★ recommended</span></span>, data: "chromescreenai" },
+                                    { label: <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", width: "100%", height: "20px", lineHeight: "20px" }}><span>On-Device <span style={{ fontSize: "10px", opacity: 0.7 }}>(Chrome)</span></span><span className="dt-recommended-tag" style={{ fontSize: "10px", color: "#9aa0a6", fontStyle: "italic" }}>★ recommended</span></span>, data: "chromescreenai" },
                                     { label: <span>OCR.space</span>, data: "ocrspace" },
                                     { label: <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", width: "100%", height: "20px", lineHeight: "20px" }}><span>Google Cloud</span><span className="dt-recommended-tag" style={{ fontSize: "10px", color: "#9aa0a6", fontStyle: "italic" }}>★ recommended</span></span>, data: "googlecloud" },
                                     { label: <span style={{ display: "flex", alignItems: "center", gap: "6px", height: "20px", lineHeight: "20px" }}>Gemini Vision <BsStars style={{ fontSize: "12px" }} /></span>, data: "gemini_vision" }
@@ -615,7 +615,8 @@ export const TabTranslation: VFC<TabTranslationProps> = ({ scrollTarget, onScrol
                                     <ModelStatusIndicator state={csai} />
                                     <ModelDownloadError state={csai} />
                                     <ProviderRating quality={3} speed={2} />
-                                    <div>- Offline text recognition by Google</div>
+                                    <div>- Offline and privacy-friendly text recognition</div>
+                                    <div>- Requires 120MB one-time engine download</div>
                                     <div>- Auto-detects 70+ languages</div>
                                     <div style={{ marginTop: "6px", fontStyle: "italic", color: "#5f6268", fontSize: "10px" }}>
                                         Downloaded on demand from Google's public server
@@ -896,15 +897,15 @@ export const TabTranslation: VFC<TabTranslationProps> = ({ scrollTarget, onScrol
                                     <div style={{ display: "inline-flex", flexDirection: "column" }}>
                                         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                                             <img src={steamdeckLogo} alt="" style={{ height: "18px" }} />
-                                            <span style={{ fontWeight: "bold", color: "#dcdedf" }}>On-Device (NLLB)</span>
+                                            <span style={{ fontWeight: "bold", color: "#dcdedf" }}>On-Device (NLLB-200 1.3B)</span>
                                         </div>
                                         <ModelHeadingProgressBar state={nllb} />
                                     </div>
                                     <ModelStatusIndicator state={nllb} />
                                     <ModelDownloadError state={nllb} />
                                     <ProviderRating quality={1} speed={1} />
-                                    <div>- Offline translation</div>
-                                    <div>- Privacy-friendly</div>
+                                    <div>- Offline and privacy-friendly translation</div>
+                                    <div>- Requires 1.4GB one-time model download</div>
                                     <div>- Single model covers most languages</div>
                                     <div>- Language auto-detect not supported</div>
                                     <div>- Experimental support</div>
