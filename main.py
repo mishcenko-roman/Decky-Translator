@@ -10,6 +10,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 import logging
+import re
 import json
 import base64
 import tarfile
@@ -85,6 +86,57 @@ from providers import ProviderManager, TextRegion, NetworkError, ApiKeyError, Ra
 
 _processing_lock = False
 
+SENSITIVE_SETTING_KEYS = {
+    "google_api_key",
+    "google_vision_api_key",
+    "google_translate_api_key",
+    "gemini_api_key",
+}
+
+
+def _mask_secret(value):
+    if not isinstance(value, str) or not value:
+        return value
+    if len(value) <= 4:
+        return "****"
+    return "*" * (len(value) - 4) + value[-4:]
+
+
+def _mask_for_log(key, value):
+    return _mask_secret(value) if key in SENSITIVE_SETTING_KEYS else value
+
+
+_URL_KEY_RE = re.compile(r"\bkey=([A-Za-z0-9_\-]{16,})")
+
+
+def _redact_url_keys(text):
+    return _URL_KEY_RE.sub(lambda m: f"key={_mask_secret(m.group(1))}", text)
+
+
+class UrlKeyRedactFilter(logging.Filter):
+    def filter(self, record):
+        try:
+            if isinstance(record.msg, str) and "key=" in record.msg:
+                record.msg = _redact_url_keys(record.msg)
+            if record.args:
+                if isinstance(record.args, dict):
+                    record.args = {
+                        k: _redact_url_keys(v) if isinstance(v, str) and "key=" in v else v
+                        for k, v in record.args.items()
+                    }
+                else:
+                    record.args = tuple(
+                        _redact_url_keys(a) if isinstance(a, str) and "key=" in a else a
+                        for a in record.args
+                    )
+        except Exception:
+            pass
+        return True
+
+
+_url_redact_filter = UrlKeyRedactFilter()
+
+
 # Get environment variable
 settingsDir = os.environ.get("DECKY_PLUGIN_SETTINGS_DIR", "/home/deck/homebrew/settings")
 
@@ -124,9 +176,11 @@ from logging.handlers import TimedRotatingFileHandler
 log_file = Path(DECKY_PLUGIN_LOG_DIR) / "decky-translator.log"
 log_file_handler = TimedRotatingFileHandler(log_file, when="midnight", backupCount=2)
 log_file_handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
+log_file_handler.addFilter(_url_redact_filter)
 logger.handlers.clear()
 logger.addHandler(log_file_handler)
 logger.setLevel(logging.INFO)
+logging.getLogger("urllib3").addFilter(_url_redact_filter)
 logger.info(f"Configured rotating log file: {log_file}")
 
 
@@ -813,7 +867,7 @@ class SettingsManager:
             os.makedirs(os.path.dirname(self.settings_path), exist_ok=True)
             with open(self.settings_path, 'w') as f:
                 json.dump(self.settings, f, indent=4)
-            logger.debug(f"Saved setting {key}={value}")
+            logger.debug(f"Saved setting {key}={_mask_for_log(key, value)}")
             return True
         except Exception as e:
             logger.error(f"Failed to save setting {key}: {str(e)}")
@@ -822,7 +876,7 @@ class SettingsManager:
 
     def get_setting(self, key, default=None):
         value = self.settings.get(key, default)
-        logger.debug(f"Getting setting {key}: {value}")
+        logger.debug(f"Getting setting {key}: {_mask_for_log(key, value)}")
         return value
 
 
@@ -928,7 +982,7 @@ class Plugin:
         return self._settings.get_setting(key, default)
 
     async def set_setting(self, key, value):
-        logger.debug(f"Setting {key} to: {value}")
+        logger.debug(f"Setting {key} to: {_mask_for_log(key, value)}")
         try:
             if key == "target_language":
                 self._target_language = value
