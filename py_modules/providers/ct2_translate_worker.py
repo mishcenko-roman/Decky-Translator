@@ -18,11 +18,13 @@ Self-terminates after 10 minutes of inactivity.
 
 import json
 import os
-import signal
 import sys
 import time
 
 IDLE_TIMEOUT = 600  # 10 minutes
+
+# Skip the idle timeout when parent sets CT2_PERSISTENT=1
+PERSISTENT = os.environ.get("CT2_PERSISTENT") == "1"
 
 
 def _has_oscillatory_repetition(tokens):
@@ -30,15 +32,6 @@ def _has_oscillatory_repetition(tokens):
         return False
     trigrams = [tuple(tokens[i:i + 3]) for i in range(len(tokens) - 2)]
     return len(set(trigrams)) / len(trigrams) < 0.5
-
-# Try to set PR_SET_PDEATHSIG so we die if parent crashes
-try:
-    import ctypes
-    libc = ctypes.CDLL("libc.so.6", use_errno=True)
-    PR_SET_PDEATHSIG = 1
-    libc.prctl(PR_SET_PDEATHSIG, signal.SIGTERM)
-except Exception:
-    pass
 
 # Redirect stderr to avoid blocking on pipe buffer
 try:
@@ -229,7 +222,10 @@ def main():
     import select
 
     while True:
-        if time.monotonic() - last_activity > IDLE_TIMEOUT:
+        # fix for leaking RAM
+        if os.getppid() == 1:
+            break
+        if not PERSISTENT and time.monotonic() - last_activity > IDLE_TIMEOUT:
             break
 
         try:

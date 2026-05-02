@@ -20,6 +20,7 @@ export interface Settings {
     rapidocrUnclipRatio: number; // RapidOCR box expansion ratio (1.0-3.0)
     rapidocrPersistentMode: boolean; // Keep RapidOCR worker alive between requests
     chromeScreenAiPersistentMode: boolean; // Keep Chrome Screen AI worker alive between requests
+    ct2PersistentMode: boolean; // Keep CT2/NLLB worker alive between requests
     pauseGameOnOverlay: boolean; // Setting to control pausing game when overlay is shown
     quickToggleEnabled: boolean; // Quick toggle overlay with right button in combo modes
     useFreeProviders: boolean; // Use free providers (OCR.space + free Google Translate) - deprecated, use ocrProvider
@@ -60,6 +61,7 @@ const initialSettings: Settings = {
     rapidocrUnclipRatio: 1.6, // Default RapidOCR box expansion ratio (1.0-3.0)
     rapidocrPersistentMode: false,
     chromeScreenAiPersistentMode: false,
+    ct2PersistentMode: false,
     pauseGameOnOverlay: false, // Default to not pausing game
     quickToggleEnabled: false, // Default to disabled
     useFreeProviders: true, // Default to free providers (no API key needed) - deprecated
@@ -135,6 +137,7 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({
                     rapidocrUnclipRatio: serverSettings.rapidocr_unclip_ratio ?? 1.6, // RapidOCR unclip ratio (1.0-3.0)
                     rapidocrPersistentMode: serverSettings.rapidocr_persistent_mode ?? false,
                     chromeScreenAiPersistentMode: serverSettings.chromescreenai_persistent_mode ?? false,
+                    ct2PersistentMode: serverSettings.ct2_persistent_mode ?? false,
                     pauseGameOnOverlay: serverSettings.pause_game_on_overlay || false, // Add default if not present
                     quickToggleEnabled: serverSettings.quick_toggle_enabled || false, // Add default if not present
                     useFreeProviders: serverSettings.use_free_providers !== false, // Default to true (deprecated)
@@ -216,6 +219,7 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({
                 rapidocrUnclipRatio: 'rapidocr_unclip_ratio',
                 rapidocrPersistentMode: 'rapidocr_persistent_mode',
                 chromeScreenAiPersistentMode: 'chromescreenai_persistent_mode',
+                ct2PersistentMode: 'ct2_persistent_mode',
                 pauseGameOnOverlay: 'pause_game_on_overlay',
                 quickToggleEnabled: 'quick_toggle_enabled',
                 useFreeProviders: 'use_free_providers',

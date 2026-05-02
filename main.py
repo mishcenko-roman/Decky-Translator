@@ -903,6 +903,7 @@ class Plugin:
     _rapidocr_unclip_ratio: float = 1.6  # RapidOCR box expansion ratio (1.0-3.0)
     _rapidocr_persistent_mode: bool = False  # Keep RapidOCR worker alive between requests
     _chromescreenai_persistent_mode: bool = False  # Keep Chrome Screen AI worker alive between requests
+    _ct2_persistent_mode: bool = False  # Keep CT2/NLLB worker alive between requests
     _pause_game_on_overlay: bool = False  # Default to not pausing game on overlay
     _quick_toggle_enabled: bool = False  # Default to disabled for quick toggle
 
@@ -1017,6 +1018,16 @@ class Plugin:
                     )
                     if not plugin_enabled and not self._chromescreenai_persistent_mode:
                         self._provider_manager.stop_chromescreenai_worker()
+            elif key == "ct2_persistent_mode":
+                self._ct2_persistent_mode = bool(value)
+                if self._provider_manager:
+                    plugin_enabled = self._settings.get_setting("enabled", True)
+                    self._provider_manager.set_ct2_persistent_mode(
+                        self._ct2_persistent_mode,
+                        apply_to_provider=plugin_enabled,
+                    )
+                    if not plugin_enabled and not self._ct2_persistent_mode:
+                        self._provider_manager.stop_ct2_worker()
             elif key == "pause_game_on_overlay":
                 self._pause_game_on_overlay = value
             elif key == "quick_toggle_enabled":
@@ -1085,6 +1096,11 @@ class Plugin:
                         ocr_provider=self._ocr_provider,
                         translation_provider=value
                     )
+                    plugin_enabled = self._settings.get_setting("enabled", True)
+                    if value != "ct2":
+                        self._provider_manager.stop_ct2_worker()
+                    elif plugin_enabled:
+                        self._provider_manager.resume_ct2_worker()
             else:
                 logger.warning(f"Unknown setting key: {key}")
 
@@ -1117,6 +1133,7 @@ class Plugin:
                 "rapidocr_unclip_ratio": self._settings.get_setting("rapidocr_unclip_ratio", 1.6),
                 "rapidocr_persistent_mode": self._settings.get_setting("rapidocr_persistent_mode", False),
                 "chromescreenai_persistent_mode": self._settings.get_setting("chromescreenai_persistent_mode", False),
+                "ct2_persistent_mode": self._settings.get_setting("ct2_persistent_mode", False),
                 "pause_game_on_overlay": self._settings.get_setting("pause_game_on_overlay", False),
                 "quick_toggle_enabled": self._settings.get_setting("quick_toggle_enabled", False),
                 "debug_mode": self._settings.get_setting("debug_mode", False),
@@ -1658,8 +1675,11 @@ class Plugin:
             if enabled:
                 if self._rapidocr_persistent_mode:
                     self._provider_manager.resume_rapidocr_worker()
+                if self._ct2_persistent_mode:
+                    self._provider_manager.resume_ct2_worker()
             else:
                 self._provider_manager.stop_rapidocr_worker()
+                self._provider_manager.stop_ct2_worker()
         return await self.set_setting("enabled", enabled)
 
     async def get_input_language(self):
@@ -2034,6 +2054,9 @@ class Plugin:
             self._chromescreenai_persistent_mode = bool(
                 load_setting("chromescreenai_persistent_mode", self._chromescreenai_persistent_mode)
             )
+            self._ct2_persistent_mode = bool(
+                load_setting("ct2_persistent_mode", self._ct2_persistent_mode)
+            )
             self._provider_manager.set_rapidocr_confidence(self._rapidocr_confidence)
             self._provider_manager.set_rapidocr_box_thresh(self._rapidocr_box_thresh)
             self._provider_manager.set_rapidocr_unclip_ratio(self._rapidocr_unclip_ratio)
@@ -2048,6 +2071,11 @@ class Plugin:
                 self._chromescreenai_persistent_mode,
                 apply_to_provider=plugin_enabled_at_boot
                                   and self._ocr_provider == "chromescreenai",
+            )
+            self._provider_manager.set_ct2_persistent_mode(
+                self._ct2_persistent_mode,
+                apply_to_provider=plugin_enabled_at_boot
+                                  and self._translation_provider == "ct2",
             )
 
             # Apply debug_mode log level

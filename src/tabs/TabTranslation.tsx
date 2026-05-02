@@ -950,6 +950,19 @@ export const TabTranslation: VFC<TabTranslationProps> = ({ scrollTarget, onScrol
                     </Field>
                 </PanelSectionRow>
 
+                {settings.translationProvider === 'ct2' && (
+                    <PanelSectionRow>
+                        <ToggleField
+                            label="Faster Translation"
+                            description="Keeps the translation model loaded in memory between translations"
+                            checked={settings.ct2PersistentMode}
+                            onChange={(value) => {
+                                updateSetting('ct2PersistentMode', value, 'Faster translation');
+                            }}
+                        />
+                    </PanelSectionRow>
+                )}
+
                 {/* Invisible spacer to help with scroll when focusing last element */}
                 <PanelSectionRow>
                     <Focusable

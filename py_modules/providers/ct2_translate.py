@@ -170,6 +170,7 @@ class CT2TranslateProvider(TranslationProvider):
         self._worker_lock = threading.Lock()
         self._loaded_model_dir = None
         self._python_path = None
+        self._persistent_mode = False
 
         bin_worker = os.path.join(
             self._plugin_dir, "bin", "py_modules", "providers", "ct2_translate_worker.py"
@@ -206,6 +207,8 @@ class CT2TranslateProvider(TranslationProvider):
             env['PYTHONDONTWRITEBYTECODE'] = '1'
             env['OMP_NUM_THREADS'] = '4'
             env['MKL_NUM_THREADS'] = '4'
+            if self._persistent_mode:
+                env['CT2_PERSISTENT'] = '1'
 
             try:
                 self._worker_process = subprocess.Popen(
@@ -462,6 +465,29 @@ class CT2TranslateProvider(TranslationProvider):
                     pass
                 self._worker_process = None
                 self._loaded_model_dir = None
+
+    def set_persistent_mode(self, enabled: bool) -> None:
+        enabled = bool(enabled)
+        if enabled == self._persistent_mode:
+            return
+        self._persistent_mode = enabled
+        logger.info(f"CT2 persistent mode: {enabled}")
+        if enabled:
+            # Warm up so the first translate is faster
+            threading.Thread(target=self._warmup_worker, daemon=True).start()
+        else:
+            self.shutdown()
+
+    def _warmup_worker(self) -> None:
+        if not self._persistent_mode:
+            return
+        if not self._model_manager.is_model_downloaded():
+            return
+        # recycle existing worker so the env var takes effect.
+        if self._worker_process and self._worker_process.poll() is None:
+            self._kill_worker()
+        if self._ensure_worker():
+            self._load_model()
 
     def shutdown(self):
         with self._worker_lock:

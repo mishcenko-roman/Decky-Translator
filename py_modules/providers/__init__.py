@@ -80,6 +80,7 @@ class ProviderManager:
         self._rapidocr_unclip_ratio = 1.6  # Default RapidOCR box expansion ratio (1.0-3.0)
         self._rapidocr_persistent_mode = False  # Keep worker alive between requests
         self._chromescreenai_persistent_mode = False  # Same for Chrome Screen AI
+        self._ct2_persistent_mode = False  # Same for CT2/NLLB translation
 
         # CT2 translation
         self._ct2_models_dir = None
@@ -282,6 +283,37 @@ class ProviderManager:
         if provider:
             provider.set_persistent_mode(True)
 
+    def set_ct2_persistent_mode(
+        self, enabled: bool, apply_to_provider: bool = True
+    ) -> None:
+        self._ct2_persistent_mode = bool(enabled)
+        if not apply_to_provider:
+            logger.debug(
+                f"CT2 persistent_mode preference: {self._ct2_persistent_mode} (not applied)"
+            )
+            return
+        if self._ct2_persistent_mode and self._translation_provider_preference == "ct2":
+            provider = self.get_translation_provider(ProviderType.CT2)
+        else:
+            provider = self._translation_providers.get(ProviderType.CT2)
+        if provider:
+            provider.set_persistent_mode(self._ct2_persistent_mode)
+        logger.debug(f"CT2 persistent_mode set to {self._ct2_persistent_mode}")
+
+    def stop_ct2_worker(self) -> None:
+        provider = self._translation_providers.get(ProviderType.CT2)
+        if provider:
+            provider.set_persistent_mode(False)
+
+    def resume_ct2_worker(self) -> None:
+        if not self._ct2_persistent_mode:
+            return
+        if self._translation_provider_preference != "ct2":
+            return
+        provider = self.get_translation_provider(ProviderType.CT2)
+        if provider:
+            provider.set_persistent_mode(True)
+
     def get_ocr_provider(
         self,
         provider_type: Optional[ProviderType] = None
@@ -376,9 +408,12 @@ class ProviderManager:
                 )
             elif provider_type == ProviderType.CT2:
                 if self._model_manager:
-                    self._translation_providers[provider_type] = CT2TranslateProvider(
+                    provider = CT2TranslateProvider(
                         model_manager=self._model_manager
                     )
+                    if self._ct2_persistent_mode:
+                        provider.set_persistent_mode(True)
+                    self._translation_providers[provider_type] = provider
 
         return self._translation_providers.get(provider_type)
 
