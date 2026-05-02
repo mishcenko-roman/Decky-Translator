@@ -146,15 +146,20 @@ class ScreenAIDownloader:
 
     def _prpc_post(self, url: str, payload: dict) -> dict:
         import requests
-        resp = requests.post(
-            url,
-            data=json.dumps(payload),
-            headers={
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-            },
-            timeout=30,
-        )
+        try:
+            resp = requests.post(
+                url,
+                data=json.dumps(payload),
+                headers={
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                },
+                timeout=30,
+            )
+        except requests.ConnectionError:
+            raise Exception("Cannot reach the remote resource. Check internet connection.")
+        except requests.Timeout:
+            raise Exception("Connection timed out. Check internet connection.")
         if resp.status_code != 200:
             raise Exception(f"pRPC HTTP {resp.status_code}: {resp.text[:200]}")
         body = resp.content
@@ -197,10 +202,7 @@ class ScreenAIDownloader:
         )
 
         try:
-            try:
-                signed_url = self._resolve_signed_url()
-            except Exception as e:
-                raise Exception(f"Cannot reach CIPD: {e}")
+            signed_url = self._resolve_signed_url()
 
             if self._download_cancel:
                 raise Exception("Download cancelled")
@@ -208,7 +210,7 @@ class ScreenAIDownloader:
             try:
                 resp = requests.get(signed_url, stream=True, timeout=60)
             except requests.ConnectionError:
-                raise Exception("Cannot reach CIPD storage. Check internet connection.")
+                raise Exception("Cannot reach the remote resource. Check internet connection.")
             except requests.Timeout:
                 raise Exception("Connection timed out. Check internet connection.")
 
