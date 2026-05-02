@@ -325,15 +325,24 @@ const ModelActionButton: VFC<{
     state: ModelDownloadState;
     actionRef?: RefObject<HTMLDivElement>;
 }> = ({ state, actionRef }) => {
-    const { ActionIcon, onActionClick } = state;
+    const { ActionIcon, onActionClick, isDownloaded, isDownloading } = state;
+    const needsDownload = !isDownloaded && !isDownloading;
     return (
-        <DialogButton
-            ref={actionRef}
-            onClick={onActionClick}
-            style={{ minWidth: "40px", width: "40px", padding: "10px 0" }}
-        >
-            <ActionIcon />
-        </DialogButton>
+        <>
+            <style>{`@keyframes dt-download-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); } 50% { box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.45); } }`}</style>
+            <DialogButton
+                ref={actionRef}
+                onClick={onActionClick}
+                style={{
+                    minWidth: "40px",
+                    width: "40px",
+                    padding: "10px 0",
+                    animation: needsDownload ? "dt-download-pulse 1.6s ease-in-out infinite" : undefined,
+                }}
+            >
+                <ActionIcon style={{ transform: "scale(1.25) translateY(1px)" }} />
+            </DialogButton>
+        </>
     );
 };
 
