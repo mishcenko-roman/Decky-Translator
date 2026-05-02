@@ -296,6 +296,17 @@ const ChromeScreenAIManager: VFC<{ actionRef?: RefObject<HTMLDivElement> }> = ({
                                 {statusText}
                             </span>
                         </div>
+                        {status.error && !isDownloading && (
+                            <div style={{
+                                fontSize: "11px",
+                                color: "#ff6b6b",
+                                marginTop: "2px",
+                                whiteSpace: "normal",
+                                wordBreak: "break-word",
+                            }}>
+                                {status.error}
+                            </div>
+                        )}
                         {isDownloading && (
                             <div style={{
                                 marginTop: "4px",
@@ -324,15 +335,6 @@ const ChromeScreenAIManager: VFC<{ actionRef?: RefObject<HTMLDivElement> }> = ({
                 </Focusable>
             </PanelSectionRow>
 
-            {status.error && (
-                <PanelSectionRow>
-                    <Field focusable={true} childrenContainerWidth="max">
-                        <div style={{ color: "#ff6b6b", fontSize: "11px" }}>
-                            {status.error}
-                        </div>
-                    </Field>
-                </PanelSectionRow>
-            )}
             <div style={{ height: "1px", backgroundColor: "rgba(255,255,255,0.08)" }} />
         </>
     );
@@ -439,6 +441,17 @@ const CT2ModelManager: VFC<{ actionRef?: RefObject<HTMLDivElement> }> = ({ actio
                                 {statusText}
                             </span>
                         </div>
+                        {modelStatus.error && !isDownloading && (
+                            <div style={{
+                                fontSize: "11px",
+                                color: "#ff6b6b",
+                                marginTop: "2px",
+                                whiteSpace: "normal",
+                                wordBreak: "break-word",
+                            }}>
+                                {modelStatus.error}
+                            </div>
+                        )}
                         {isDownloading && (
                             <div style={{
                                 marginTop: "4px",
@@ -466,16 +479,6 @@ const CT2ModelManager: VFC<{ actionRef?: RefObject<HTMLDivElement> }> = ({ actio
                     </DialogButton>
                 </Focusable>
             </PanelSectionRow>
-
-            {modelStatus.error && (
-                <PanelSectionRow>
-                    <Field focusable={true} childrenContainerWidth="max">
-                        <div style={{ color: "#ff6b6b", fontSize: "11px" }}>
-                            {modelStatus.error}
-                        </div>
-                    </Field>
-                </PanelSectionRow>
-            )}
 
             {isAutoDetect && (
                 <PanelSectionRow>
