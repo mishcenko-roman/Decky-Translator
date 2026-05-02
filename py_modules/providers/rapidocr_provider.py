@@ -119,6 +119,7 @@ class RapidOCRProvider(OCRProvider):
         self._unclip_ratio = 1.6  # Box expansion ratio
         self._init_error = None  # Store any initialization error
         self._python_path = None  # Path to system Python 3 interpreter
+        self._logged_python_path: Optional[str] = None
 
         self._persistent_mode = False
         self._worker_proc: Optional[subprocess.Popen] = None
@@ -183,7 +184,9 @@ class RapidOCRProvider(OCRProvider):
             logger.warning(self._init_error)
             return False
 
-        logger.debug(f"RapidOCR: Using Python interpreter: {self._python_path}")
+        if self._python_path != self._logged_python_path:
+            logger.debug(f"RapidOCR: Using Python interpreter: {self._python_path}")
+            self._logged_python_path = self._python_path
         return True
 
     @property

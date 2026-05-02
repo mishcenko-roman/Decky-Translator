@@ -92,6 +92,7 @@ class ProviderManager:
         # Created on first configure() that supplies rapidocr_models_dir.
         self._rapidocr_downloader: Optional[RapidOCRDownloader] = None
 
+        self._status_rapidocr_provider: Optional[RapidOCRProvider] = None
         self._reachability_cache: dict = {}
 
         logger.debug("ProviderManager initialized")
@@ -500,17 +501,19 @@ class ProviderManager:
         # Add RapidOCR availability info
         rapidocr = self._ocr_providers.get(ProviderType.RAPIDOCR)
         if rapidocr is None:
-            # Create temporarily to check availability
-            models_dir = (
-                self._rapidocr_downloader.get_target_dir()
-                if self._rapidocr_downloader else ""
-            )
-            rapidocr = RapidOCRProvider(
-                min_confidence=self._rapidocr_confidence,
-                models_dir=models_dir,
-            )
-        status["rapidocr_available"] = rapidocr.is_available()
-        status["rapidocr_languages"] = rapidocr.get_supported_languages() if rapidocr.is_available() else []
+            if self._status_rapidocr_provider is None:
+                models_dir = (
+                    self._rapidocr_downloader.get_target_dir()
+                    if self._rapidocr_downloader else ""
+                )
+                self._status_rapidocr_provider = RapidOCRProvider(
+                    min_confidence=self._rapidocr_confidence,
+                    models_dir=models_dir,
+                )
+            rapidocr = self._status_rapidocr_provider
+        rapidocr_available = rapidocr.is_available()
+        status["rapidocr_available"] = rapidocr_available
+        status["rapidocr_languages"] = rapidocr.get_supported_languages() if rapidocr_available else []
         status["rapidocr_info"] = rapidocr.get_rapidocr_info()
         status["rapidocr_error"] = rapidocr.get_init_error()
 
