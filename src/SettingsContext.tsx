@@ -63,7 +63,7 @@ const initialSettings: Settings = {
     pauseGameOnOverlay: false, // Default to not pausing game
     quickToggleEnabled: false, // Default to disabled
     useFreeProviders: true, // Default to free providers (no API key needed) - deprecated
-    ocrProvider: "rapidocr", // Default to rapidocr (RapidOCR) provider
+    ocrProvider: "chromescreenai", // Default to chromescreenai (Chrome Screen AI) provider
     translationProvider: "freegoogle", // Default to free Google Translate
     googleApiKey: "", // Empty by default, only needed for Google Cloud
     geminiApiKey: "", // Empty by default, needed for Gemini Vision
@@ -138,7 +138,7 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({
                     pauseGameOnOverlay: serverSettings.pause_game_on_overlay || false, // Add default if not present
                     quickToggleEnabled: serverSettings.quick_toggle_enabled || false, // Add default if not present
                     useFreeProviders: serverSettings.use_free_providers !== false, // Default to true (deprecated)
-                    ocrProvider: serverSettings.ocr_provider || "rapidocr", // OCR provider setting
+                    ocrProvider: serverSettings.ocr_provider || "chromescreenai", // OCR provider setting
                     translationProvider: serverSettings.translation_provider || "freegoogle", // Translation provider setting
                     googleApiKey: serverSettings.google_api_key || "", // Google API key
                     geminiApiKey: serverSettings.gemini_api_key || "", // Gemini API key
@@ -170,7 +170,7 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({
                 logger.setEnabled(serverSettings.debug_mode || false); // Set debug mode for logger
 
                 // Set provider settings for upfront API key validation
-                logic.setOcrProvider(serverSettings.ocr_provider || "rapidocr");
+                logic.setOcrProvider(serverSettings.ocr_provider || "chromescreenai");
                 logic.setTranslationProvider(serverSettings.translation_provider || "freegoogle");
                 logic.setHasGoogleApiKey(!!serverSettings.google_api_key);
                 logic.setHasGeminiApiKey(!!serverSettings.gemini_api_key);

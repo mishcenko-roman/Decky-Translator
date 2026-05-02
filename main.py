@@ -913,7 +913,7 @@ class Plugin:
     # Provider system
     _provider_manager: ProviderManager = None
     _use_free_providers: bool = True  # Default to free providers (no API key needed)
-    _ocr_provider: str = "rapidocr"  # "rapidocr" (RapidOCR), "ocrspace" (OCR.space), or "googlecloud" (Google Cloud)
+    _ocr_provider: str = "chromescreenai"  # "rapidocr" (RapidOCR), "ocrspace" (OCR.space), or "googlecloud" (Google Cloud)
     _translation_provider: str = "freegoogle"  # "freegoogle" or "googlecloud"
 
     # OCR API configurations - user must provide their own API key
@@ -1924,6 +1924,15 @@ class Plugin:
                 self._use_free_providers = (saved_ocr_provider != "googlecloud")
             else:
                 self._settings.set_setting("ocr_provider", self._ocr_provider)
+
+            # One-shot migration of the old rapidocr default to chromescreenai
+            if not self._settings.get_setting("default_ocr_provider_migrated_v1", False):
+                if saved_ocr_provider == "rapidocr":
+                    self._ocr_provider = "chromescreenai"
+                    self._use_free_providers = True
+                    self._settings.set_setting("ocr_provider", "chromescreenai")
+                    logger.info("Migrated default OCR provider rapidocr -> chromescreenai")
+                self._settings.set_setting("default_ocr_provider_migrated_v1", True)
 
             # Load translation provider
             saved_translation_provider = self._settings.get_setting("translation_provider")

@@ -71,7 +71,7 @@ class ProviderManager:
         self._gemini_api_key = ""
         self._gemini_model = "gemini-2.5-flash"
         self._gemini_target_language = "en"
-        self._ocr_provider_preference = "rapidocr"  # "rapidocr", "ocrspace", "googlecloud", or "gemini_vision"
+        self._ocr_provider_preference = "chromescreenai"  # "rapidocr", "ocrspace", "googlecloud", "gemini_vision", or "chromescreenai"
         self._translation_provider_preference = "freegoogle"  # "freegoogle", "googlecloud", or "ct2"
         self._rapidocr_confidence = 0.5  # Default RapidOCR confidence threshold (0.0-1.0)
         self._rapidocr_box_thresh = 0.5  # Default RapidOCR box detection threshold (0.0-1.0)
@@ -108,7 +108,7 @@ class ProviderManager:
                                 If False, use Google Cloud APIs (requires API key).
                                 (Deprecated: use ocr_provider and translation_provider instead)
             google_api_key: Google Cloud API key (only needed for googlecloud providers)
-            ocr_provider: OCR provider preference - "rapidocr", "ocrspace", or "googlecloud"
+            ocr_provider: OCR provider preference - "rapidocr", "ocrspace", "googlecloud", "gemini_vision", or "chromescreenai"
             translation_provider: Translation provider preference - "freegoogle", "googlecloud", or "ct2"
             ct2_models_dir: Directory for CT2 translation model storage
         """
@@ -129,7 +129,7 @@ class ProviderManager:
         else:
             # Backwards compatibility: derive from use_free_providers
             self._use_free_providers = use_free_providers
-            self._ocr_provider_preference = "rapidocr" if use_free_providers else "googlecloud"
+            self._ocr_provider_preference = "chromescreenai" if use_free_providers else "googlecloud"
 
         # Handle translation_provider setting
         if translation_provider:
