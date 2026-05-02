@@ -937,8 +937,18 @@ class Plugin:
             elif key == "input_mode":
                 self._input_mode = value
             elif key == "enabled":
-                # No need to set an instance variable for this
-                pass
+                if self._provider_manager:
+                    if value:
+                        if self._rapidocr_persistent_mode:
+                            self._provider_manager.resume_rapidocr_worker()
+                        if self._chromescreenai_persistent_mode:
+                            self._provider_manager.resume_chromescreenai_worker()
+                        if self._ct2_persistent_mode:
+                            self._provider_manager.resume_ct2_worker()
+                    else:
+                        self._provider_manager.stop_rapidocr_worker()
+                        self._provider_manager.stop_chromescreenai_worker()
+                        self._provider_manager.stop_ct2_worker()
             elif key == "google_api_key":
                 # Single API key for both Vision and Translate
                 self._google_vision_api_key = value
@@ -1669,18 +1679,6 @@ class Plugin:
 
     async def get_enabled_state(self):
         return await self.get_setting("enabled", True)
-
-    async def set_enabled_state(self, enabled):
-        if self._provider_manager:
-            if enabled:
-                if self._rapidocr_persistent_mode:
-                    self._provider_manager.resume_rapidocr_worker()
-                if self._ct2_persistent_mode:
-                    self._provider_manager.resume_ct2_worker()
-            else:
-                self._provider_manager.stop_rapidocr_worker()
-                self._provider_manager.stop_ct2_worker()
-        return await self.set_setting("enabled", enabled)
 
     async def get_input_language(self):
         return self._input_language
