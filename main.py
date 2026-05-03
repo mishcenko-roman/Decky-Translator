@@ -183,6 +183,13 @@ logger.setLevel(logging.INFO)
 logging.getLogger("urllib3").addFilter(_url_redact_filter)
 logger.info(f"Configured rotating log file: {log_file}")
 
+try:
+    with open(os.path.join(PLUGIN_DIR, "package.json")) as _pkg:
+        _plugin_version = json.load(_pkg).get("version", "unknown")
+except Exception as _e:
+    _plugin_version = "unknown"
+logger.info(f"Decky Translator v{_plugin_version} starting")
+
 
 import threading
 import queue
