@@ -212,9 +212,6 @@ export const TabMain: VFC<TabMainProps> = ({ logic, overlayVisible, providerStat
                                 )}
                                 {settings.ocrProvider === 'gemini_vision' && (
                                     <div style={{ marginLeft: '22px', marginBottom: '6px' }}>
-                                        <div style={{ color: settings.geminiApiKey ? '#666' : '#ff6b6b', fontSize: '10px' }}>
-                                            {settings.geminiApiKey ? 'API key configured' : 'API key required'}
-                                        </div>
                                         <div style={{ color: '#666', fontSize: '10px' }}>
                                             Model: {settings.geminiModel.replace(/^gemini-/, '').split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
                                         </div>
@@ -223,9 +220,6 @@ export const TabMain: VFC<TabMainProps> = ({ logic, overlayVisible, providerStat
                                 )}
                                 {settings.ocrProvider === 'googlecloud' && (
                                     <div style={{ marginLeft: '22px', marginBottom: '6px' }}>
-                                        <div style={{ color: settings.googleApiKey ? '#666' : '#ff6b6b', fontSize: '10px' }}>
-                                            {settings.googleApiKey ? 'API key configured' : 'API key required'}
-                                        </div>
                                         <ReachabilityRow result={webReachability?.ocr} expectedProvider="googlecloud" />
                                     </div>
                                 )}
@@ -332,9 +326,6 @@ export const TabMain: VFC<TabMainProps> = ({ logic, overlayVisible, providerStat
                                 <div style={{ marginLeft: '22px', marginBottom: '6px' }}>
                                     {settings.ocrProvider === 'gemini_vision' && (
                                         <>
-                                            <div style={{ color: settings.geminiApiKey ? '#666' : '#ff6b6b', fontSize: '10px' }}>
-                                                {settings.geminiApiKey ? 'API key configured' : 'API key required'}
-                                            </div>
                                             <div style={{ color: '#666', fontSize: '10px' }}>
                                                 Model: {settings.geminiModel.replace(/^gemini-/, '').split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
                                             </div>
@@ -349,9 +340,6 @@ export const TabMain: VFC<TabMainProps> = ({ logic, overlayVisible, providerStat
                                     )}
                                     {settings.ocrProvider !== 'gemini_vision' && settings.translationProvider === 'googlecloud' && (
                                         <>
-                                            <div style={{ color: settings.googleApiKey ? '#666' : '#ff6b6b', fontSize: '10px' }}>
-                                                {settings.googleApiKey ? 'API key configured' : 'API key required'}
-                                            </div>
                                             <ReachabilityRow result={webReachability?.translation} expectedProvider="googlecloud" />
                                         </>
                                     )}
