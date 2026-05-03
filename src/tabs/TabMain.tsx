@@ -12,7 +12,7 @@ import {
 } from "@decky/ui";
 
 import { VFC } from "react";
-import { BsTranslate, BsXLg, BsEye } from "react-icons/bs";
+import { BsTranslate, BsXLg, BsEye, BsStars } from "react-icons/bs";
 import { SiKofi } from "react-icons/si";
 import { HiQrCode, HiInboxArrowDown } from "react-icons/hi2";
 import showQrModal from "../showQrModal";
@@ -158,16 +158,24 @@ export const TabMain: VFC<TabMainProps> = ({ logic, overlayVisible, providerStat
                         {/* Provider Status */}
                         <PanelSectionRow>
                             <div style={{ fontSize: '12px', marginTop: '8px' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
-                                    <BsEye style={{ marginRight: '8px', color: '#aaa' }} />
-                                    <span style={{ color: '#888' }}>Text Recognition:</span>
-                                    <span style={{ marginLeft: '6px', fontWeight: 'bold' }}>
-                                        {settings.ocrProvider === 'chromescreenai' ? 'On-Device' :
-                                         settings.ocrProvider === 'rapidocr' ? 'On-Device' :
-                                         settings.ocrProvider === 'ocrspace' ? 'OCR.space' :
-                                         settings.ocrProvider === 'gemini_vision' ? 'Gemini Vision' : 'Google Cloud'}
-                                    </span>
-                                </div>
+                                {settings.ocrProvider === 'gemini_vision' && (
+                                    <div style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
+                                        <BsStars style={{ marginRight: '8px', color: '#aaa' }} />
+                                        <span style={{ color: '#888' }}>Recognize + Translate:</span>
+                                        <span style={{ marginLeft: '6px', fontWeight: 'bold' }}>Gemini</span>
+                                    </div>
+                                )}
+                                {settings.ocrProvider !== 'gemini_vision' && (
+                                    <div style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
+                                        <BsEye style={{ marginRight: '8px', color: '#aaa' }} />
+                                        <span style={{ color: '#888' }}>Text Recognition:</span>
+                                        <span style={{ marginLeft: '6px', fontWeight: 'bold' }}>
+                                            {settings.ocrProvider === 'chromescreenai' ? 'On-Device' :
+                                             settings.ocrProvider === 'rapidocr' ? 'On-Device' :
+                                             settings.ocrProvider === 'ocrspace' ? 'OCR.space' : 'Google Cloud'}
+                                        </span>
+                                    </div>
+                                )}
                                 {settings.ocrProvider === 'rapidocr' && (
                                     <div style={{ marginLeft: '22px', marginBottom: '6px' }}>
                                         {providerStatus?.rapidocr_downloaded && (
@@ -193,7 +201,7 @@ export const TabMain: VFC<TabMainProps> = ({ logic, overlayVisible, providerStat
                                 {settings.ocrProvider === 'chromescreenai' && (
                                     <div style={{ marginLeft: '22px', marginBottom: '6px' }}>
                                         {providerStatus?.chromescreenai_downloaded && (
-                                            <div style={{ color: '#666', fontSize: '10px' }}>Engine: Chrome Screen AI</div>
+                                            <div style={{ color: '#666', fontSize: '10px', marginBottom: '4px' }}>Engine: Chrome Screen AI</div>
                                         )}
                                         <div style={{ color: '#666', fontSize: '10px', display: 'flex', alignItems: 'center' }}>
                                             {providerStatus?.chromescreenai_downloading ? (
@@ -208,14 +216,6 @@ export const TabMain: VFC<TabMainProps> = ({ logic, overlayVisible, providerStat
                                                 </>
                                             )}
                                         </div>
-                                    </div>
-                                )}
-                                {settings.ocrProvider === 'gemini_vision' && (
-                                    <div style={{ marginLeft: '22px', marginBottom: '6px' }}>
-                                        <div style={{ color: '#666', fontSize: '10px' }}>
-                                            Model: {settings.geminiModel.replace(/^gemini-/, '').split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
-                                        </div>
-                                        <ReachabilityRow result={webReachability?.ocr} expectedProvider="gemini_vision" />
                                     </div>
                                 )}
                                 {settings.ocrProvider === 'googlecloud' && (
@@ -314,22 +314,23 @@ export const TabMain: VFC<TabMainProps> = ({ logic, overlayVisible, providerStat
                                         <ReachabilityRow result={webReachability?.ocr} expectedProvider="ocrspace" />
                                     </div>
                                 )}
-                                <div style={{ display: 'flex', alignItems: 'center', marginBottom: '2px' }}>
-                                    <BsTranslate style={{ marginRight: '8px', color: '#aaa' }} />
-                                    <span style={{ color: '#888' }}>Translation:</span>
-                                    <span style={{ marginLeft: '6px', fontWeight: 'bold' }}>
-                                        {settings.ocrProvider === 'gemini_vision' ? 'Gemini Vision' :
-                                         settings.translationProvider === 'googlecloud' ? 'Google Cloud' :
-                                         settings.translationProvider === 'ct2' ? 'On-Device' : 'Google Translate'}
-                                    </span>
-                                </div>
+                                {settings.ocrProvider !== 'gemini_vision' && (
+                                    <div style={{ display: 'flex', alignItems: 'center', marginBottom: '2px' }}>
+                                        <BsTranslate style={{ marginRight: '8px', color: '#aaa' }} />
+                                        <span style={{ color: '#888' }}>Translation:</span>
+                                        <span style={{ marginLeft: '6px', fontWeight: 'bold' }}>
+                                            {settings.translationProvider === 'googlecloud' ? 'Google Cloud' :
+                                             settings.translationProvider === 'ct2' ? 'On-Device' : 'Google Translate'}
+                                        </span>
+                                    </div>
+                                )}
                                 <div style={{ marginLeft: '22px', marginBottom: '6px' }}>
                                     {settings.ocrProvider === 'gemini_vision' && (
                                         <>
                                             <div style={{ color: '#666', fontSize: '10px' }}>
                                                 Model: {settings.geminiModel.replace(/^gemini-/, '').split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
                                             </div>
-                                            <ReachabilityRow result={webReachability?.translation} expectedProvider="gemini_vision" />
+                                            <ReachabilityRow result={webReachability?.ocr} expectedProvider="gemini_vision" />
                                         </>
                                     )}
                                     {settings.ocrProvider !== 'gemini_vision' && settings.translationProvider === 'freegoogle' && (
