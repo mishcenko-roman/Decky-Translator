@@ -102,7 +102,7 @@ export const TabMain: VFC<TabMainProps> = ({ logic, overlayVisible, providerStat
 
     const handleButtonClick = () => {
         if (overlayVisible) {
-            logic.imageState.hideImage();
+            logic.dismiss();
             Router.CloseSideMenus();
             return;
         }

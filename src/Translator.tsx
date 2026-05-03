@@ -26,6 +26,7 @@ export class GameTranslatorLogic {
     private confidenceThreshold: number = 0.6; // Default confidence threshold
     private pauseGameOnOverlay: boolean = false;
     private hideIdenticalTranslations: boolean = false;
+    private currentRunId: number = 0;
 
     // Provider settings for upfront validation
     private ocrProvider: string = "rapidocr";
@@ -56,12 +57,7 @@ export class GameTranslatorLogic {
             if (!this.enabled) return;
 
             if (actionType === ActionType.DISMISS) {
-                // Dismiss overlay action
-                if (this.imageState.isVisible()) {
-                    this.imageState.hideImage();
-                    // Update visibility state in Input handler
-                    this.shortcutInput.setOverlayVisible(false);
-                }
+                this.dismiss();
             } else if (actionType === ActionType.TOGGLE_TRANSLATIONS) {
                 // Toggle translations action
                 if (this.imageState.isVisible()) {
@@ -137,10 +133,8 @@ export class GameTranslatorLogic {
             logger.error('Translator', 'Failed to save enabled state to server', error);
         });
 
-        // If we're disabling the plugin and the overlay is visible, hide it
-        if (!enabled && this.imageState.isVisible()) {
-            this.imageState.hideImage();
-            this.shortcutInput.setOverlayVisible(false);
+        if (!enabled) {
+            this.dismiss();
         }
 
         // Stop or start the backend hidraw monitor based on enabled state
@@ -309,6 +303,15 @@ export class GameTranslatorLogic {
         });
     }
 
+    dismiss = (): void => {
+        this.currentRunId++;
+        this.isProcessing = false;
+        if (this.imageState.isVisible()) {
+            this.imageState.hideImage();
+            this.shortcutInput.setOverlayVisible(false);
+        }
+    }
+
     takeScreenshotAndTranslate = async (): Promise<void> => {
         // If already processing or disabled, return
         if (this.isProcessing || !this.enabled) {
@@ -318,6 +321,9 @@ export class GameTranslatorLogic {
 
         if (!this.canStartTranslation()) return;
 
+        const runId = ++this.currentRunId;
+        const isCancelled = (): boolean => runId !== this.currentRunId;
+
         try {
             this.isProcessing = true;
 
@@ -325,6 +331,11 @@ export class GameTranslatorLogic {
             const appName = Router.MainRunningApp?.display_name || "";
             logger.info('Translator', `Taking new screenshot for: ${appName}`);
             const result = await call<[string], ScreenshotResponse>('take_screenshot', appName);
+
+            if (isCancelled()) {
+                logger.debug('Translator', 'Translation cancelled before screenshot processed');
+                return;
+            }
 
             if (!result || !result.path || !result.base64) {
                 logger.warn('Translator', 'Screenshot capture failed, not opening overlay');
@@ -339,6 +350,10 @@ export class GameTranslatorLogic {
             this.imageState.updateProcessingStep("Recognizing text");
 
             const textRegions = await this.textRecognizer.recognizeTextFile(result.path);
+            if (isCancelled()) {
+                logger.debug('Translator', 'Translation cancelled after OCR');
+                return;
+            }
             logger.info('Translator', `Found ${textRegions.length} text regions`);
 
             if (textRegions.length > 0) {
@@ -349,6 +364,10 @@ export class GameTranslatorLogic {
 
                 // Translate text (skips backend call if already translated by OCR provider)
                 let translatedRegions = await this.textTranslator.translateText(textRegions);
+                if (isCancelled()) {
+                    logger.debug('Translator', 'Translation cancelled after translation step');
+                    return;
+                }
                 logger.info('Translator', `Translation complete: ${translatedRegions.length} regions`);
 
                 if (this.hideIdenticalTranslations) {
@@ -372,6 +391,11 @@ export class GameTranslatorLogic {
                 }, 2000); // 2 seconds delay
             }
         } catch (error) {
+            if (isCancelled()) {
+                logger.debug('Translator', 'Translation cancelled, suppressing error UI', error);
+                return;
+            }
+
             logger.error('Translator', 'Screenshot and translation error', error);
 
             // Check if this is a network error
@@ -404,7 +428,9 @@ export class GameTranslatorLogic {
             }
         }
         finally {
-            this.isProcessing = false;
+            if (!isCancelled()) {
+                this.isProcessing = false;
+            }
         }
     }
 

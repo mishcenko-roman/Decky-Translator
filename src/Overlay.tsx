@@ -767,7 +767,7 @@ export const TranslatedTextOverlay: VFC<{
 
 
 // Main image overlay component
-export const ImageOverlay: VFC<{ state: ImageState }> = ({ state }) => {
+export const ImageOverlay: VFC<{ state: ImageState, onDismiss: () => void }> = ({ state, onDismiss }) => {
     const [visible, setVisible] = useState<boolean>(false);
     const [imageData, setImageData] = useState<string>("");
     const [regions, setRegions] = useState<TranslatedRegion[]>([]);
@@ -815,16 +815,15 @@ export const ImageOverlay: VFC<{ state: ImageState }> = ({ state }) => {
 
         state.onStateChanged(handleStateChanged);
 
-        // Handle system suspend
-        const suspend_register = SteamClient.User.RegisterForPrepareForSystemSuspendProgress(function() {
-            state.hideImage();
+        const suspend_register = SteamClient.User.RegisterForPrepareForSystemSuspendProgress(() => {
+            onDismiss();
         });
 
         return () => {
             state.offStateChanged(handleStateChanged);
             suspend_register.unregister();
         };
-    }, [state]);
+    }, [state, onDismiss]);
 
     return (
         <TranslatedTextOverlay

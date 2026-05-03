@@ -597,6 +597,9 @@ export class Input {
             if (!buttonPressed) {
                 logger.debug('Input', `${buttonName} released, clearing waitingForRelease`);
                 this.waitingForRelease = false;
+                // Without this, the next press is ignored
+                this.leftTouchpadTouched = false;
+                this.rightTouchpadTouched = false;
                 this.stopProgressAnimation();
                 return;
             } else {
