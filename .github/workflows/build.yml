@@ -164,6 +164,17 @@ jobs:
         run: |
           cli/decky plugin build $(pwd) -o ./out
 
+      - name: Repack zip with kebab-case inner folder
+        run: |
+          cd out
+          mkdir _staging
+          unzip -q "Decky Translator.zip" -d _staging
+          mv "_staging/Decky Translator" "_staging/decky-translator"
+          rm "Decky Translator.zip"
+          (cd _staging && zip -qr "../Decky Translator.zip" decky-translator)
+          rm -rf _staging
+          unzip -l "Decky Translator.zip" | head -5
+
       - name: Upload plugin artifact
         uses: actions/upload-artifact@v4
         with:
