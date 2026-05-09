@@ -60,7 +60,7 @@ export class GameTranslatorLogic {
                 this.dismiss();
             } else if (actionType === ActionType.TOGGLE_TRANSLATIONS) {
                 // Toggle translations action
-                if (this.imageState.isVisible()) {
+                if (this.imageState.isVisible() && !this.imageState.isLoading()) {
                     logger.debug('Translator', 'Toggling translation visibility');
                     this.imageState.toggleTranslationsVisibility();
                 }
