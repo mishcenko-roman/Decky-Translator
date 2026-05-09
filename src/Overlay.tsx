@@ -340,8 +340,8 @@ function calculateFontSize(region: TranslatedRegion, scalingFactor: number, font
     const charArea = (regionWidth * regionHeight) / charCount * fillFactor;
     let fontSize = Math.sqrt(charArea);
 
-    const availableWidth = regionWidth - 8;
-    const availableHeight = regionHeight - 4;
+    const availableWidth = regionWidth - 4;
+    const availableHeight = regionHeight - 2;
 
     if (availableWidth <= 0 || availableHeight <= 0) return 8;
 
@@ -644,7 +644,7 @@ export const TranslatedTextOverlay: VFC<{
                                         backgroundColor: "rgba(0, 0, 0, 0.8)",
                                         color: "#FFFFFF",
 
-                                        padding: '2px 4px',
+                                        padding: '1px 2px',
                                         borderRadius: `${Math.round(6 * generalFactor)}px`,
 
                                         fontSize: `${Math.round(fontSize)}px`,
