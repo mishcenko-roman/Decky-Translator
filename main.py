@@ -65,6 +65,11 @@ if _should_extract_dependencies():
         if os.path.exists(EXTRACTION_MARKER):
             os.remove(EXTRACTION_MARKER)
 
+# rapidocr 3 checks this dir exists at init time
+_RAPIDOCR_MODELS_PLACEHOLDER = os.path.join(BIN_PY_MODULES_DIR, "rapidocr", "models")
+if os.path.isdir(os.path.dirname(_RAPIDOCR_MODELS_PLACEHOLDER)):
+    os.makedirs(_RAPIDOCR_MODELS_PLACEHOLDER, exist_ok=True)
+
 # Add py_modules to path
 # Root py_modules always needed (contains providers/ source code)
 # bin/py_modules needed for store installs (pip packages from remote_binary)

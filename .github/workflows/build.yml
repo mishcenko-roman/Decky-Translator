@@ -79,6 +79,8 @@ jobs:
           pip install opencv-python-headless -t . --no-cache-dir --upgrade --force-reinstall --no-deps
           # Remove rapidocr bundled models (we use our own)
           rm -rf rapidocr/models
+          # rapidocr requires empty folder, otherwise it breaks
+          mkdir -p rapidocr/models
           # Strip test directories, __pycache__, and .pyc files
           find . -type d -name "tests" -exec rm -rf {} + 2>/dev/null || true
           find . -type d -name "test" -exec rm -rf {} + 2>/dev/null || true
