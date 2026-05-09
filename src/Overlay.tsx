@@ -343,7 +343,7 @@ function calculateFontSize(region: TranslatedRegion, scalingFactor: number, font
     const availableWidth = regionWidth - 4;
     const availableHeight = regionHeight - 2;
 
-    if (availableWidth <= 0 || availableHeight <= 0) return 8;
+    if (availableWidth <= 0 || availableHeight <= 0) return 7;
 
     const charsPerLine = Math.max(1, Math.floor(availableWidth / (fontSize * 0.6)));
     const explicitLines = text.split('\n');
@@ -356,7 +356,7 @@ function calculateFontSize(region: TranslatedRegion, scalingFactor: number, font
     }
 
     fontSize *= fontScale;
-    return Math.max(8, Math.min(fontSize, 48));
+    return Math.max(7, Math.min(fontSize, 48));
 }
 
 // Overlay component to display translated text
