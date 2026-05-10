@@ -71,7 +71,7 @@ jobs:
           rm -rf sympy sympy-*.dist-info sympy-*.data isympy.py
           rm -rf mpmath mpmath-*.dist-info
           rm -rf flatbuffers flatbuffers-*.dist-info
-          rm -rf google protobuf-*.dist-info
+          rm -rf protobuf-*.dist-info
           # tqdm is needed by rapidocr 3.x -- do NOT remove
           # Remove full opencv-python (rapidocr pulls it in, but we only need headless)
           rm -rf opencv_python.libs opencv_python-*.dist-info
