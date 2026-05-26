@@ -202,6 +202,46 @@ export class GameTranslatorLogic {
         return this.pauseGameOnOverlay;
     }
 
+    // Method to start continuous capture mode
+    async startContinuousCapture(): Promise<void> {
+        try {
+            logger.info('Translator', 'Starting continuous capture mode');
+            const result = await call<[string, number], boolean>(
+                'start_continuous_capture',
+                'button_triggered',  // mode
+                3                     // target_fps
+            );
+            if (result) {
+                logger.info('Translator', 'Continuous capture started successfully');
+                this.notify('Continuous capture enabled', 1500);
+            } else {
+                logger.error('Translator', 'Failed to start continuous capture');
+                this.notify('Failed to enable continuous capture', 2000);
+            }
+        } catch (error) {
+            logger.error('Translator', 'Error starting continuous capture', error);
+            this.notify('Error starting continuous capture', 2000);
+        }
+    }
+
+    // Method to stop continuous capture mode
+    async stopContinuousCapture(): Promise<void> {
+        try {
+            logger.info('Translator', 'Stopping continuous capture mode');
+            const result = await call<[], boolean>('stop_continuous_capture');
+            if (result) {
+                logger.info('Translator', 'Continuous capture stopped successfully');
+                this.notify('Continuous capture disabled', 1500);
+            } else {
+                logger.error('Translator', 'Failed to stop continuous capture');
+                this.notify('Failed to disable continuous capture', 2000);
+            }
+        } catch (error) {
+            logger.error('Translator', 'Error stopping continuous capture', error);
+            this.notify('Error stopping continuous capture', 2000);
+        }
+    }
+
     // Method to pause the current game
     async pauseCurrentGame(): Promise<void> {
         try {

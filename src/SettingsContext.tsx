@@ -29,6 +29,8 @@ export interface Settings {
     googleApiKey: string; // Google Cloud Vision API key for text recognition
     geminiApiKey: string; // Gemini API key for Gemini Vision (free tier available)
     geminiModel: string; // Gemini model to use
+    literaryMode: boolean; // Enable literary translation with Claude API
+    claudeApiKey: string; // Anthropic Claude API key for literary translation
     debugMode: boolean; // Debug mode for verbose console logging
     fontScale: number; // Overlay font scale multiplier for external monitors
     groupingPower: number; // Text grouping aggressiveness (0.25 normal - 1.0 huge)
@@ -70,6 +72,8 @@ const initialSettings: Settings = {
     googleApiKey: "", // Empty by default, only needed for Google Cloud
     geminiApiKey: "", // Empty by default, needed for Gemini Vision
     geminiModel: "gemini-2.5-flash", // Default Gemini model
+    literaryMode: false, // Literary mode disabled by default
+    claudeApiKey: "", // Empty by default, needed for Claude literary translation
     debugMode: false, // Debug mode off by default
     fontScale: 1.0,
     groupingPower: 0.25,
@@ -146,6 +150,8 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({
                     googleApiKey: serverSettings.google_api_key || "", // Google API key
                     geminiApiKey: serverSettings.gemini_api_key || "", // Gemini API key
                     geminiModel: serverSettings.gemini_model || "gemini-2.5-flash",
+                    literaryMode: serverSettings.literary_mode ?? false, // Literary mode setting
+                    claudeApiKey: serverSettings.claude_api_key || "", // Claude API key
                     debugMode: serverSettings.debug_mode || false,
                     fontScale: serverSettings.font_scale ?? 1.0,
                     groupingPower: serverSettings.grouping_power ?? 0.25,
@@ -228,6 +234,8 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({
                 googleApiKey: 'google_api_key',
                 geminiApiKey: 'gemini_api_key',
                 geminiModel: 'gemini_model',
+                literaryMode: 'literary_mode',
+                claudeApiKey: 'claude_api_key',
                 debugMode: 'debug_mode',
                 fontScale: 'font_scale',
                 groupingPower: 'grouping_power',

@@ -9,10 +9,13 @@ import {
     Field
 } from "@decky/ui";
 
-import { VFC, useState } from "react";
+import { call } from "@decky/api";
+
+import { VFC, useState, useEffect } from "react";
 import { useSettings } from "../SettingsContext";
 import { InputMode } from "../Input";
 import { useFontOptions, isRemoteFont, loadRemoteFont } from "../fonts";
+import { GameTranslatorLogic } from "../Translator";
 
 // Input mode options for dropdown
 const inputModeOptions = [
@@ -61,9 +64,10 @@ const getInputModeButtons = (mode: string): string => {
 
 interface TabControlsProps {
     inputDiagnostics: any;
+    logic: GameTranslatorLogic;
 }
 
-export const TabControls: VFC<TabControlsProps> = ({ inputDiagnostics }) => {
+export const TabControls: VFC<TabControlsProps> = ({ inputDiagnostics, logic }) => {
     const { settings, updateSetting } = useSettings();
     const { fontOptions, fontDescription, preloadWebFonts, unavailableDyslexiaFonts } = useFontOptions(
         settings.translatedTextFontFamily,
@@ -71,6 +75,34 @@ export const TabControls: VFC<TabControlsProps> = ({ inputDiagnostics }) => {
         () => updateSetting('translatedTextFontFamily', '', 'Text font'),
     );
     const [fontDropdownKey, setFontDropdownKey] = useState(0);
+    const [continuousCaptureEnabled, setContinuousCaptureEnabled] = useState(false);
+    const [capturingStatus, setCapturingStatus] = useState<'idle' | 'starting' | 'stopping'>('idle');
+    const [perfStats, setPerfStats] = useState<any>(null);
+
+    // Poll performance stats every 2 seconds when continuous capture is running
+    useEffect(() => {
+        if (!continuousCaptureEnabled) {
+            setPerfStats(null);
+            return;
+        }
+
+        const pollStats = async () => {
+            try {
+                const stats = await call<[], any>('get_performance_stats');
+                setPerfStats(stats);
+            } catch (error) {
+                console.error('Failed to fetch performance stats:', error);
+            }
+        };
+
+        // Initial poll
+        pollStats();
+
+        // Set up polling interval (2 seconds)
+        const intervalId = setInterval(pollStats, 2000);
+
+        return () => clearInterval(intervalId);
+    }, [continuousCaptureEnabled]);
 
     return (
         <div>
@@ -133,6 +165,70 @@ export const TabControls: VFC<TabControlsProps> = ({ inputDiagnostics }) => {
                                 updateSetting('quickToggleEnabled', value, 'Quick toggle');
                             }}
                         />
+                    </PanelSectionRow>
+                )}
+
+                <PanelSectionRow>
+                    <ToggleField
+                        checked={continuousCaptureEnabled}
+                        disabled={capturingStatus !== 'idle'}
+                        label="Continuous Capture"
+                        description={
+                            capturingStatus === 'idle'
+                                ? "Enable real-time game text capture by holding L4/R4"
+                                : capturingStatus === 'starting'
+                                ? "Starting continuous capture..."
+                                : "Stopping continuous capture..."
+                        }
+                        onChange={async (value) => {
+                            if (value && capturingStatus === 'idle') {
+                                // Start continuous capture
+                                setCapturingStatus('starting');
+                                setContinuousCaptureEnabled(true);
+                                await logic.startContinuousCapture();
+                                setCapturingStatus('idle');
+                            } else if (!value && capturingStatus === 'idle') {
+                                // Stop continuous capture
+                                setCapturingStatus('stopping');
+                                setContinuousCaptureEnabled(false);
+                                await logic.stopContinuousCapture();
+                                setCapturingStatus('idle');
+                            }
+                        }}
+                    />
+                </PanelSectionRow>
+
+                {/* Performance stats display when continuous capture is active */}
+                {continuousCaptureEnabled && perfStats && (
+                    <PanelSectionRow>
+                        <Field focusable={true} childrenContainerWidth="max">
+                            <div style={{
+                                backgroundColor: 'rgba(0,200,255,0.08)',
+                                padding: '12px',
+                                borderRadius: '6px',
+                                fontSize: '13px',
+                                border: '1px solid rgba(0,200,255,0.2)'
+                            }}>
+                                <div style={{ display: 'grid', gap: '4px' }}>
+                                    <div>
+                                        <span style={{ color: '#888' }}>Capture FPS:</span>{' '}
+                                        <span style={{ color: '#0c8' }}>{perfStats.capture_fps?.toFixed(1) || 'N/A'}</span>
+                                    </div>
+                                    <div>
+                                        <span style={{ color: '#888' }}>OCR Latency:</span>{' '}
+                                        <span style={{ color: '#0c8' }}>{perfStats.ocr_latency_ms?.toFixed(1) || 'N/A'}ms</span>
+                                    </div>
+                                    <div>
+                                        <span style={{ color: '#888' }}>Translation Latency:</span>{' '}
+                                        <span style={{ color: '#0c8' }}>{perfStats.translation_latency_ms?.toFixed(1) || 'N/A'}ms</span>
+                                    </div>
+                                    <div>
+                                        <span style={{ color: '#888' }}>CPU Usage:</span>{' '}
+                                        <span style={{ color: '#0c8' }}>{perfStats.cpu_usage_pct?.toFixed(1) || 'N/A'}%</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </Field>
                     </PanelSectionRow>
                 )}
             </PanelSection>

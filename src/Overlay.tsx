@@ -11,6 +11,19 @@ import type { FontStyleOption } from "./fonts";
 
 export type HorizontalTextAlignment = 'left' | 'right' | 'center' | 'justify';
 
+// Subtitle history tracking
+interface SubtitleHistoryEntry {
+    text: string;
+    timestamp: number;
+    animationPhase: 'fade-in' | 'visible' | 'fade-out';
+}
+
+interface SubtitleHistory {
+    current: SubtitleHistoryEntry | null;
+    previous: SubtitleHistoryEntry[];  // Max 2 items
+    timeoutId: ReturnType<typeof setTimeout> | null;
+}
+
 // UI Composition for overlay
 enum UIComposition {
     Hidden = 0,
@@ -359,6 +372,66 @@ function calculateFontSize(region: TranslatedRegion, scalingFactor: number, font
     return Math.max(7, Math.min(fontSize, 48));
 }
 
+// Helper: Detect if region is in subtitle area (bottom 20% of screen)
+function isSubtitleRegion(region: TranslatedRegion, imageHeight: number): boolean {
+    const bottomThreshold = imageHeight * 0.8;
+    return region.rect.top >= bottomThreshold;
+}
+
+// Helper: Add new entry to subtitle history and return history + current
+function updateSubtitleHistory(
+    history: SubtitleHistory,
+    newText: string,
+    naturalHeight: number
+): SubtitleHistory {
+    const now = Date.now();
+    
+    // Clear pending timeout
+    if (history.timeoutId) {
+        clearTimeout(history.timeoutId);
+    }
+    
+    const newEntry: SubtitleHistoryEntry = {
+        text: newText,
+        timestamp: now,
+        animationPhase: 'fade-in'
+    };
+    
+    // If current exists, move it to previous history
+    let newPrevious = history.previous;
+    if (history.current) {
+        newPrevious = [history.current, ...history.previous].slice(0, 2);  // Keep max 2
+    }
+    
+    return {
+        current: newEntry,
+        previous: newPrevious,
+        timeoutId: null
+    };
+}
+
+// Helper: Initiate fade-out of all subtitle lines after timeout
+function startSubtitleFadeOut(
+    history: SubtitleHistory,
+    onFadeOutComplete: () => void
+): SubtitleHistory {
+    if (!history.current) return history;
+    
+    // Clear any existing timeout
+    if (history.timeoutId) {
+        clearTimeout(history.timeoutId);
+    }
+    
+    const timeoutId = setTimeout(() => {
+        onFadeOutComplete();
+    }, 4000);  // 4 second timeout with no new subtitle
+    
+    return {
+        ...history,
+        timeoutId
+    };
+}
+
 // Overlay component to display translated text
 export const TranslatedTextOverlay: VFC<{
     visible: boolean,
@@ -385,6 +458,12 @@ export const TranslatedTextOverlay: VFC<{
     // State to track the natural (original) image dimensions from the screenshot
     const [naturalDimensions, setNaturalDimensions] = useState({ width: 1280, height: 800 });
 
+    // Subtitle history tracking (per region by index)
+    const subtitleHistoryRef = useRef<Map<number, SubtitleHistory>>(new Map());
+
+    // State to trigger history updates
+    const [historyUpdateTrigger, setHistoryUpdateTrigger] = useState(0);
+
     // Load font as a side-effect (network request / DOM injection)
     useEffect(() => {
         ensureFontLoaded(translatedTextFontFamily);
@@ -403,6 +482,35 @@ export const TranslatedTextOverlay: VFC<{
     const formattedImageData = imageData && imageData.startsWith('data:')
         ? imageData
         : imageData ? `data:image/png;base64,${imageData}` : "";
+
+    // Update subtitle history when regions change
+    useEffect(() => {
+        if (!translationsVisible) return;
+        
+        regions.forEach((region, index) => {
+            if (isSubtitleRegion(region, naturalDimensions.height)) {
+                const text = region.translatedText || region.text;
+                let history = subtitleHistoryRef.current.get(index) || {
+                    current: null,
+                    previous: [],
+                    timeoutId: null
+                };
+                
+                // Update history with new text
+                history = updateSubtitleHistory(history, text, naturalDimensions.height);
+                
+                // Start fade-out timeout
+                history = startSubtitleFadeOut(history, () => {
+                    // Clear history on fade-out timeout
+                    subtitleHistoryRef.current.delete(index);
+                    setHistoryUpdateTrigger(t => t + 1);
+                });
+                
+                subtitleHistoryRef.current.set(index, history);
+                setHistoryUpdateTrigger(t => t + 1);
+            }
+        });
+    }, [regions, translationsVisible, naturalDimensions.height]);
 
     // Update image dimensions when the image loads or window resizes
     const updateImageDimensions = useCallback(() => {
@@ -625,46 +733,133 @@ export const TranslatedTextOverlay: VFC<{
                             }
 
                             return (
-                                <div
-                                    key={index}
-                                    style={{
-                                        position: "absolute",
-                                        display: 'flex',
-                                        justifyContent: alignmentStyles.justifyContent,
-                                        alignItems: 'center',
-                                        ...positionStyles,
-                                        top: `${scaled[index].top}px`,
-                                        minWidth: `${scaled[index].width}px`,
-                                        ...(useMaxContentWidth
-                                            ? { width: 'max-content', maxWidth: `${labelMaxWidth}px` }
-                                            : { maxWidth: `${labelMaxWidth}px` }),
-                                        minHeight: `${scaled[index].height}px`,
-                                        boxSizing: 'border-box',
+                                <div key={index}>
+                                    {/* Render subtitle history if this is a subtitle region */}
+                                    {isSubtitleRegion(region, naturalDimensions.height) && (() => {
+                                        const subtitleHistory = subtitleHistoryRef.current.get(index);
+                                        if (!subtitleHistory) return null;
+                                        
+                                        const historyItems: (SubtitleHistoryEntry & { isCurrentLine: boolean })[] = [];
+                                        
+                                        // Add previous history lines (faded, older first)
+                                        if (subtitleHistory.previous.length > 0) {
+                                            subtitleHistory.previous.forEach((entry, idx) => {
+                                                historyItems.push({
+                                                    ...entry,
+                                                    isCurrentLine: false
+                                                });
+                                            });
+                                        }
+                                        
+                                        // Add current line
+                                        if (subtitleHistory.current) {
+                                            historyItems.push({
+                                                ...subtitleHistory.current,
+                                                isCurrentLine: true
+                                            });
+                                        }
+                                        
+                                        const lineHeight = fontSize * 1.15;
+                                        
+                                        return historyItems.map((entry, histIdx) => {
+                                            const isNewLine = entry.isCurrentLine;
+                                            const lineOffsetPx = lineHeight * (histIdx - (historyItems.length - 1));
+                                            const opacity = isNewLine ? 1 : 0.6;  // Previous lines are faded
+                                            const animation = isNewLine 
+                                                ? "fadeInSubtitle 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards"
+                                                : "none";
+                                            
+                                            return (
+                                                <div
+                                                    key={`subtitle-${index}-${histIdx}`}
+                                                    style={{
+                                                        position: "absolute",
+                                                        display: 'flex',
+                                                        justifyContent: alignmentStyles.justifyContent,
+                                                        alignItems: 'center',
+                                                        ...positionStyles,
+                                                        top: `${scaled[index].top + lineOffsetPx}px`,
+                                                        minWidth: `${scaled[index].width}px`,
+                                                        ...(useMaxContentWidth
+                                                            ? { width: 'max-content', maxWidth: `${labelMaxWidth}px` }
+                                                            : { maxWidth: `${labelMaxWidth}px` }),
+                                                        minHeight: `${scaled[index].height}px`,
+                                                        boxSizing: 'border-box',
 
-                                        backgroundColor: "rgba(0, 0, 0, 0.8)",
-                                        color: "#FFFFFF",
+                                                        backgroundColor: "rgba(0, 0, 0, 0.8)",
+                                                        color: "#FFFFFF",
 
-                                        padding: '1px 2px',
-                                        borderRadius: `${Math.round(6 * generalFactor)}px`,
+                                                        padding: '1px 2px',
+                                                        borderRadius: `${Math.round(6 * generalFactor)}px`,
 
-                                        fontSize: `${Math.round(fontSize)}px`,
-                                        lineHeight: '1.15',
-                                        ...resolveFontStyleCSS(translatedTextFontStyle),
-                                        fontFamily: translatedOverlayFontFamily,
+                                                        fontSize: `${Math.round(fontSize)}px`,
+                                                        lineHeight: '1.15',
+                                                        ...resolveFontStyleCSS(translatedTextFontStyle),
+                                                        fontFamily: translatedOverlayFontFamily,
 
-                                        wordWrap: "break-word",
-                                        whiteSpace: "pre-wrap",
+                                                        wordWrap: "break-word",
+                                                        whiteSpace: "pre-wrap",
+                                                        
+                                                        opacity: opacity,
+                                                        animation: animation,
+                                                        transition: isNewLine ? "none" : "opacity 0.5s ease-out"
+                                                    }}
+                                                >
+                                                    <div style={{
+                                                        width: '100%',
+                                                        textAlign: alignmentStyles.textAlign,
+                                                        textAlignLast: translatedTextAlignment === 'justify' ? 'justify' : alignmentStyles.textAlign,
+                                                    }}>
+                                                        {entry.text}
+                                                    </div>
+                                                </div>
+                                            );
+                                        });
+                                    })()}
+                                    
+                                    {/* Render single translation for non-subtitle regions */}
+                                    {!isSubtitleRegion(region, naturalDimensions.height) && (
+                                        <div
+                                            style={{
+                                                position: "absolute",
+                                                display: 'flex',
+                                                justifyContent: alignmentStyles.justifyContent,
+                                                alignItems: 'center',
+                                                ...positionStyles,
+                                                top: `${scaled[index].top}px`,
+                                                minWidth: `${scaled[index].width}px`,
+                                                ...(useMaxContentWidth
+                                                    ? { width: 'max-content', maxWidth: `${labelMaxWidth}px` }
+                                                    : { maxWidth: `${labelMaxWidth}px` }),
+                                                minHeight: `${scaled[index].height}px`,
+                                                boxSizing: 'border-box',
 
-                                        animation: "fadeInTranslation 0.2s ease-out forwards"
-                                    }}
-                                >
-                                    <div style={{
-                                        width: '100%',
-                                        textAlign: alignmentStyles.textAlign,
-                                        textAlignLast: translatedTextAlignment === 'justify' ? 'justify' : alignmentStyles.textAlign,
-                                    }}>
-                                        {displayText}
-                                    </div>
+                                                backgroundColor: "rgba(0, 0, 0, 0.8)",
+                                                color: "#FFFFFF",
+
+                                                padding: '1px 2px',
+                                                borderRadius: `${Math.round(6 * generalFactor)}px`,
+
+                                                fontSize: `${Math.round(fontSize)}px`,
+                                                lineHeight: '1.15',
+                                                ...resolveFontStyleCSS(translatedTextFontStyle),
+                                                fontFamily: translatedOverlayFontFamily,
+
+                                                wordWrap: "break-word",
+                                                whiteSpace: "pre-wrap",
+
+                                                animation: "fadeInTranslation 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards"
+                                            }}
+                                        >
+                                            <div style={{
+                                                width: '100%',
+                                                textAlign: alignmentStyles.textAlign,
+                                                textAlignLast: translatedTextAlignment === 'justify' ? 'justify' : alignmentStyles.textAlign,
+                                            }}>
+                                                {displayText}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             );
                         });
@@ -683,6 +878,7 @@ export const TranslatedTextOverlay: VFC<{
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
+                            animation: "fadeInTranslation 0.3s ease-out forwards",
                         }}>
                             <svg
                                 width="24"
@@ -721,6 +917,7 @@ export const TranslatedTextOverlay: VFC<{
                     maxWidth: "420px",
                     boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
                     zIndex: 7003, // Higher than the image
+                    animation: "fadeInTranslation 0.3s ease-out forwards",
                 }}>
                     {processingIsError ? (
                         <svg
@@ -750,8 +947,44 @@ export const TranslatedTextOverlay: VFC<{
                             100% { transform: rotate(360deg); }
                         }
                         @keyframes fadeInTranslation {
-                            0% { opacity: 0; transform: translateY(10px); }
-                            100% { opacity: 1; transform: translateY(0); }
+                            0% {
+                                opacity: 0;
+                                transform: translateY(10px) scale(0.95);
+                            }
+                            100% {
+                                opacity: 1;
+                                transform: translateY(0) scale(1);
+                            }
+                        }
+                        @keyframes fadeOutTranslation {
+                            0% {
+                                opacity: 1;
+                                transform: translateY(0) scale(1);
+                            }
+                            100% {
+                                opacity: 0;
+                                transform: translateY(-10px) scale(0.95);
+                            }
+                        }
+                        @keyframes fadeInSubtitle {
+                            0% {
+                                opacity: 0;
+                                transform: translateY(10px) scale(0.95);
+                            }
+                            100% {
+                                opacity: 1;
+                                transform: translateY(0) scale(1);
+                            }
+                        }
+                        @keyframes fadeOutSubtitle {
+                            0% {
+                                opacity: 1;
+                                transform: translateY(0) scale(1);
+                            }
+                            100% {
+                                opacity: 0;
+                                transform: translateY(-10px) scale(0.95);
+                            }
                         }
                     `}</style>
                     <div style={{ fontSize: "14px", whiteSpace: "pre-line", lineHeight: "1.3" }}>

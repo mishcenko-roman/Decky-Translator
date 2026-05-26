@@ -963,6 +963,63 @@ export const TabTranslation: VFC<TabTranslationProps> = ({ scrollTarget, onScrol
                     </PanelSectionRow>
                 )}
 
+                {/* Literary Mode Section */}
+                <PanelSectionRow>
+                    <ToggleField
+                        label="Literary Mode"
+                        description="Enable natural, game-optimized translations using Claude API"
+                        checked={settings.literaryMode}
+                        onChange={(value) => {
+                            updateSetting('literaryMode', value, 'Literary mode');
+                        }}
+                    />
+                </PanelSectionRow>
+
+                {settings.literaryMode && (
+                    <PanelSectionRow>
+                        <Field
+                            focusable={true}
+                            childrenContainerWidth="max"
+                            childrenLayout="below"
+                            label="Claude API Key"
+                        >
+                            <Focusable style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                                <div style={{ flex: 1, color: "#8b929a", fontSize: "12px" }}>
+                                    {settings.claudeApiKey 
+                                        ? "✓ API key configured" 
+                                        : "Get your free API key from console.anthropic.com"}
+                                </div>
+                                <DialogButton
+                                    onClick={() => {
+                                        showModal(
+                                            <ApiKeyModal
+                                                currentKey={settings.claudeApiKey}
+                                                onSave={(key) => updateSetting('claudeApiKey', key, 'Claude API Key')}
+                                                title="Claude API Key"
+                                                description="Get your free Anthropic Claude API key from console.anthropic.com. Literary mode uses Claude Haiku 3.5 for natural, game-optimized translations."
+                                            />
+                                        );
+                                    }}
+                                    style={{ minWidth: "40px", width: "40px", padding: "10px 0" }}
+                                >
+                                    <div style={{ position: "relative", display: "inline-flex" }}>
+                                        <HiKey />
+                                        <div style={{
+                                            position: "absolute",
+                                            bottom: "-8px",
+                                            right: "-6px",
+                                            width: "6px",
+                                            height: "6px",
+                                            borderRadius: "50%",
+                                            backgroundColor: settings.claudeApiKey ? "#4caf50" : "#ff6b6b"
+                                        }} />
+                                    </div>
+                                </DialogButton>
+                            </Focusable>
+                        </Field>
+                    </PanelSectionRow>
+                )}
+
                 {/* Invisible spacer to help with scroll when focusing last element */}
                 <PanelSectionRow>
                     <Focusable

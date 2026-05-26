@@ -214,7 +214,7 @@ const GameTranslator: VFC<{ logic: GameTranslatorLogic }> = ({ logic }) => {
                         {
                             // @ts-ignore
                             title: <IconGear />,
-                            content: <TabControls inputDiagnostics={inputDiagnostics} />,
+                            content: <TabControls inputDiagnostics={inputDiagnostics} logic={logic} />,
                             id: "controls",
                         }
                     ]}

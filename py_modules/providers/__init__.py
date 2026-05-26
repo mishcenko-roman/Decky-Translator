@@ -3,6 +3,7 @@
 
 import hashlib
 import logging
+import os
 import time
 from typing import List, Optional
 
@@ -23,6 +24,7 @@ from .rapidocr_provider import RapidOCRProvider
 from .chromescreenai_provider import ChromeScreenAIProvider
 from .gemini_vision import GeminiVisionProvider
 from .ct2_translate import CT2TranslateProvider
+from .opus_mt_translate import OpusMTTranslateProvider
 from .nllb_downloader import NLLBDownloader
 from .screenai_downloader import ScreenAIDownloader
 from .rapidocr_downloader import RapidOCRDownloader
@@ -51,6 +53,7 @@ __all__ = [
     'ChromeScreenAIProvider',
     'GeminiVisionProvider',
     'CT2TranslateProvider',
+    'OpusMTTranslateProvider',
     'NLLBDownloader',
     'ScreenAIDownloader',
     'RapidOCRDownloader',
@@ -397,6 +400,8 @@ class ProviderManager:
                 provider_type = ProviderType.GOOGLE
             elif self._translation_provider_preference == "ct2":
                 provider_type = ProviderType.CT2
+            elif self._translation_provider_preference == "opus_mt":
+                provider_type = ProviderType.OPUS_MT
             else:
                 provider_type = ProviderType.FREE_GOOGLE
 
@@ -415,6 +420,15 @@ class ProviderManager:
                     if self._ct2_persistent_mode:
                         provider.set_persistent_mode(True)
                     self._translation_providers[provider_type] = provider
+            elif provider_type == ProviderType.OPUS_MT:
+                # Create Opus-MT provider with models directory
+                opus_models_dir = os.path.join(
+                    os.path.dirname(self._ct2_models_dir or "/tmp"),
+                    "opus_mt"
+                ) if self._ct2_models_dir else os.path.expanduser("~/.cache/opus-mt")
+                self._translation_providers[provider_type] = OpusMTTranslateProvider(
+                    models_dir=opus_models_dir
+                )
 
         return self._translation_providers.get(provider_type)
 

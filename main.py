@@ -85,17 +85,29 @@ if os.path.exists(BIN_PY_MODULES_DIR) and BIN_PY_MODULES_DIR not in sys.path:
 import decky_plugin
 import urllib3
 import requests
+import psutil
 
 # Import provider system
 from providers import ProviderManager, TextRegion, NetworkError, ApiKeyError, RateLimitError
 
-_processing_lock = False
+# Import pipeline system
+from pipeline import (
+    TranslationPipeline,
+    PerformanceBenchmark,
+    ContinuousCaptureWorker,
+    CaptureMode
+)
+
+# Initialize async semaphore for safe concurrent access
+# (replaces old global _processing_lock boolean)
+_processing_semaphore = None
 
 SENSITIVE_SETTING_KEYS = {
     "google_api_key",
     "google_vision_api_key",
     "google_translate_api_key",
     "gemini_api_key",
+    "claude_api_key",
 }
 
 
@@ -977,6 +989,16 @@ class Plugin:
     _hidraw_monitor: HidrawButtonMonitor = None
     _evdev_monitor: EvdevGamepadMonitor = None
 
+    # Async pipeline system
+    _pipeline: TranslationPipeline = None
+    
+    # Performance monitoring and continuous capture
+    _benchmark: PerformanceBenchmark = None
+    _capture_worker: ContinuousCaptureWorker = None
+    _capture_task = None
+    _cpu_usage_value: float = 0.0  # Cached CPU usage value (updated by background task)
+    _cpu_usage_task = None  # Background task for updating CPU stats
+
     # Provider system
     _provider_manager: ProviderManager = None
     _use_free_providers: bool = True  # Default to free providers (no API key needed)
@@ -988,6 +1010,10 @@ class Plugin:
     _google_translate_api_key: str = ""
     _gemini_api_key: str = ""
     _gemini_model: str = "gemini-2.5-flash"
+    
+    # Claude API for literary translation mode
+    _literary_mode: bool = False  # Enable literary translation with Claude
+    _claude_api_key: str = ""  # Anthropic Claude API key
 
     # Generic settings handlers
     async def get_setting(self, key, default=None):
@@ -1055,6 +1081,12 @@ class Plugin:
                         ocr_provider=self._ocr_provider,
                         translation_provider=self._translation_provider
                     )
+            elif key == "literary_mode":
+                self._literary_mode = bool(value)
+                logger.info(f"Literary mode {'enabled' if self._literary_mode else 'disabled'}")
+            elif key == "claude_api_key":
+                self._claude_api_key = value
+                logger.info("Claude API key updated for literary translation")
             elif key == "hold_time_translate":
                 self._hold_time_translate = value
             elif key == "hold_time_dismiss":
@@ -1221,6 +1253,8 @@ class Plugin:
                 "hide_identical_translations": self._settings.get_setting("hide_identical_translations", False),
                 "allow_label_growth": self._settings.get_setting("allow_label_growth", False),
                 "custom_recognition_settings": self._settings.get_setting("custom_recognition_settings", False),
+                "literary_mode": self._settings.get_setting("literary_mode", False),
+                "claude_api_key": self._claude_api_key,  # Return as-is for frontend, don't expose in logs
             }
             return settings
         except Exception as e:
@@ -1253,6 +1287,243 @@ class Plugin:
             logger.error(f"Error getting provider status: {str(e)}")
             return {"error": str(e)}
 
+    async def get_pipeline_status(self):
+        """Get async pipeline statistics for monitoring."""
+        try:
+            if not self._pipeline:
+                return {"error": "Pipeline not initialized", "available": False}
+            
+            stats = self._pipeline.get_stats()
+            return {"available": True, "stats": stats}
+        except Exception as e:
+            logger.error(f"Error getting pipeline status: {e}")
+            return {"error": str(e), "available": False}
+
+    async def get_performance_stats(self):
+        """Get performance benchmarking statistics (Phase 2C). Returns flat JSON with key metrics."""
+        try:
+            if not self._benchmark:
+                return {
+                    "available": False,
+                    "capture_fps": 0.0,
+                    "ocr_latency_ms": 0.0,
+                    "translation_latency_ms": 0.0,
+                    "cpu_usage_pct": 0.0
+                }
+            
+            stats = self._benchmark.get_stats()
+            
+            # Calculate capture FPS from total frames and uptime
+            capture_fps = stats.total_frames_captured / max(stats.uptime_seconds, 1.0)
+            
+            return {
+                "available": True,
+                # Main metrics (flat structure for easy frontend consumption)
+                "capture_fps": round(capture_fps, 2),
+                "ocr_latency_ms": round(stats.ocr_latency_avg_ms, 1),
+                "translation_latency_ms": round(stats.translation_latency_avg_ms, 1),
+                "cpu_usage_pct": round(stats.cpu_usage_avg_pct, 1),
+                # Detailed metrics
+                "latency": {
+                    "capture_avg_ms": stats.capture_latency_avg_ms,
+                    "capture_max_ms": stats.capture_latency_max_ms,
+                    "capture_p95_ms": stats.capture_latency_p95_ms,
+                    "ocr_avg_ms": stats.ocr_latency_avg_ms,
+                    "ocr_max_ms": stats.ocr_latency_max_ms,
+                    "ocr_p95_ms": stats.ocr_latency_p95_ms,
+                    "translation_avg_ms": stats.translation_latency_avg_ms,
+                    "translation_max_ms": stats.translation_latency_max_ms,
+                    "translation_p95_ms": stats.translation_latency_p95_ms,
+                    "total_avg_ms": stats.total_latency_avg_ms,
+                    "total_max_ms": stats.total_latency_max_ms,
+                    "total_p95_ms": stats.total_latency_p95_ms,
+                },
+                "system": {
+                    "cpu_avg_pct": stats.cpu_usage_avg_pct,
+                    "cpu_max_pct": stats.cpu_usage_max_pct,
+                    "cpu_p95_pct": stats.cpu_usage_p95_pct,
+                    "memory_current_mb": stats.memory_usage_current_mb,
+                    "memory_growth_mb_per_min": stats.memory_growth_mb_per_min,
+                },
+                "frames": {
+                    "total_captured": stats.total_frames_captured,
+                    "total_dropped": stats.total_frames_dropped,
+                    "drop_rate_pct": stats.frame_drop_rate_pct,
+                },
+                "targets": {
+                    "total_latency_ms": 1500,
+                    "cpu_usage_pct": 30,
+                    "frame_drop_rate_pct": 10,
+                },
+                "uptime_seconds": stats.uptime_seconds,
+            }
+        except Exception as e:
+            logger.error(f"Error getting performance stats: {e}")
+            return {"error": str(e), "available": False}
+
+    async def get_capture_stats(self):
+        """Get continuous capture worker statistics (Phase 2C)."""
+        try:
+            if not self._capture_worker:
+                return {"error": "Capture worker not initialized", "available": False}
+            
+            stats = self._capture_worker.get_stats()
+            return {
+                "available": True,
+                "mode": stats.mode.value,
+                "total_frames_captured": stats.total_frames_captured,
+                "total_frames_dropped": stats.total_frames_dropped,
+                "current_fps": stats.current_fps,
+                "queue_depth": stats.queue_depth,
+                "cpu_usage_pct": stats.cpu_usage_pct,
+                "uptime_seconds": stats.uptime_seconds,
+                "last_frame_timestamp": stats.last_frame_timestamp,
+            }
+        except Exception as e:
+            logger.error(f"Error getting capture stats: {e}")
+            return {"error": str(e), "available": False}
+
+    async def start_continuous_capture(self, mode: str = "button_triggered", trigger_button: str = "L4", target_fps: int = 3) -> dict:
+        """
+        Start continuous frame capture for real-time translation (Phase 2C).
+        
+        Args:
+            mode: Capture mode - "disabled", "manual", "button_triggered", or "continuous"
+            trigger_button: Button to trigger capture - "L4", "R4", or custom button name
+            target_fps: Target frames per second (1-5 recommended)
+            
+        Returns:
+            Dictionary with success/error status
+        """
+        try:
+            if not self._capture_worker:
+                return {
+                    "success": False,
+                    "error": "Capture worker not initialized",
+                    "available": False
+                }
+            
+            # Convert string mode to CaptureMode enum
+            try:
+                capture_mode = CaptureMode[mode.upper().replace("_", "")]
+            except KeyError:
+                # Fallback to enum value string
+                capture_mode = CaptureMode(mode.lower())
+            
+            # Update worker configuration
+            self._capture_worker.set_mode(capture_mode, trigger_button, target_fps)
+            
+            # Start the worker if not already running
+            if not self._capture_worker.is_running():
+                await self._capture_worker.start()
+                logger.info(f"Continuous capture started: mode={mode}, button={trigger_button}, fps={target_fps}")
+            else:
+                logger.info(f"Capture worker already running, updated config: mode={mode}, button={trigger_button}, fps={target_fps}")
+            
+            return {
+                "success": True,
+                "message": f"Capture started with mode={mode}, trigger_button={trigger_button}, target_fps={target_fps}",
+                "available": True
+            }
+        except Exception as e:
+            logger.error(f"Error starting continuous capture: {e}")
+            logger.error(traceback.format_exc())
+            return {
+                "success": False,
+                "error": str(e),
+                "available": False
+            }
+
+    async def stop_continuous_capture(self) -> dict:
+        """
+        Stop continuous frame capture (Phase 2C).
+        
+        Returns:
+            Dictionary with success/error status
+        """
+        try:
+            if not self._capture_worker:
+                return {
+                    "success": False,
+                    "error": "Capture worker not initialized",
+                    "available": False
+                }
+            
+            if self._capture_worker.is_running():
+                await self._capture_worker.stop()
+                logger.info("Continuous capture stopped")
+            else:
+                logger.debug("Capture worker not running, nothing to stop")
+            
+            return {
+                "success": True,
+                "message": "Capture stopped",
+                "available": True
+            }
+        except Exception as e:
+            logger.error(f"Error stopping continuous capture: {e}")
+            logger.error(traceback.format_exc())
+            return {
+                "success": False,
+                "error": str(e),
+                "available": False
+            }
+                "available": True,
+                "mode": stats.mode.value,
+                "total_frames_captured": stats.total_frames_captured,
+                "total_frames_dropped": stats.total_frames_dropped,
+                "current_fps": stats.current_fps,
+                "queue_depth": stats.queue_depth,
+                "cpu_usage_pct": stats.cpu_usage_pct,
+                "uptime_seconds": stats.uptime_seconds,
+                "last_frame_timestamp": stats.last_frame_timestamp,
+            }
+        except Exception as e:
+            logger.error(f"Error getting capture stats: {e}")
+            return {"error": str(e), "available": False}
+
+    async def set_capture_mode(self, mode: str):
+        """Set continuous capture mode (Phase 2C)."""
+        try:
+            if not self._capture_worker:
+                return {"error": "Capture worker not initialized", "success": False}
+            
+            # Convert string to CaptureMode enum
+            capture_mode = CaptureMode[mode.upper()] if hasattr(CaptureMode, mode.upper()) else CaptureMode.BUTTON_TRIGGERED
+            await self._capture_worker.set_mode(capture_mode)
+            
+            return {"success": True, "mode": capture_mode.value}
+        except Exception as e:
+            logger.error(f"Error setting capture mode: {e}")
+            return {"error": str(e), "success": False}
+
+    async def set_capture_fps(self, fps: int):
+        """Set continuous capture target FPS (Phase 2C)."""
+        try:
+            if not self._capture_worker:
+                return {"error": "Capture worker not initialized", "success": False}
+            
+            # Clamp FPS to valid range (1-5)
+            fps = max(1, min(5, int(fps)))
+            self._capture_worker.target_fps = fps
+            
+            return {"success": True, "target_fps": fps}
+        except Exception as e:
+            logger.error(f"Error setting capture FPS: {e}")
+            return {"error": str(e), "success": False}
+
+    async def log_performance_summary(self):
+        """Log a performance summary for debugging (Phase 2C)."""
+        try:
+            if self._benchmark:
+                self._benchmark.log_summary()
+                return {"success": True, "message": "Performance summary logged"}
+            else:
+                return {"error": "Benchmark not initialized", "success": False}
+        except Exception as e:
+            logger.error(f"Error logging performance summary: {e}")
+            return {"error": str(e), "success": False}
+
     async def check_web_reachability(self):
         try:
             if self._provider_manager:
@@ -1264,128 +1535,129 @@ class Plugin:
 
     async def take_screenshot(self, app_name: str = ""):
         logger.debug(f"Taking screenshot for app: {app_name}")
-        global _processing_lock
+        global _processing_semaphore
 
-        if _processing_lock:
-            logger.info("Screenshot already in progress, skipping")
-            raise RuntimeError("Screenshot already in progress")
+        if _processing_semaphore is None:
+            logger.error("Processing semaphore not initialized")
+            raise RuntimeError("Plugin not properly initialized")
 
         # Real captures run 100KB+, tiny PNGs are videoconvert corruption or missing frames
         MIN_VALID_SIZE = 30_000
         MAX_ATTEMPTS = 3
 
         try:
-            _processing_lock = True
+            async with _processing_semaphore:
+                # Only 1 screenshot at a time (concurrent with OCR/translation in pipeline)
+                # Real captures run 100KB+, tiny PNGs are videoconvert corruption or missing frames
+                MIN_VALID_SIZE = 30_000
+                MAX_ATTEMPTS = 3
 
-            # Sanitize and default app name
-            if not app_name or app_name.strip().lower() == "null":
-                app_name = "Decky-Screenshot"
-            else:
-                app_name = app_name.replace(":", " ").replace("/", " ").strip()
+                # Sanitize and default app name
+                if not app_name or app_name.strip().lower() == "null":
+                    app_name = "Decky-Screenshot"
+                else:
+                    app_name = app_name.replace(":", " ").replace("/", " ").strip()
 
-            # Build filename
-            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S_%f")
-            os.makedirs(self._screenshotPath, exist_ok=True)
-            screenshot_path = f"{self._screenshotPath}/{app_name}_{timestamp}.png"
-            logger.debug(f"Screenshot path: {screenshot_path}")
+                # Build filename
+                timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S_%f")
+                os.makedirs(self._screenshotPath, exist_ok=True)
+                screenshot_path = f"{self._screenshotPath}/{app_name}_{timestamp}.png"
+                logger.debug(f"Screenshot path: {screenshot_path}")
 
-            # Prepare environment
-            env = os.environ.copy()
-            env.update({
-                "XDG_RUNTIME_DIR": "/run/user/1000",
-                "XDG_SESSION_TYPE": "wayland",
-                "HOME": DECKY_HOME
-            })
+                # Prepare environment
+                env = os.environ.copy()
+                env.update({
+                    "XDG_RUNTIME_DIR": "/run/user/1000",
+                    "XDG_SESSION_TYPE": "wayland",
+                    "HOME": DECKY_HOME
+                })
 
-            # GStreamer pipeline: grab a few frames then EOS
-            # Using num-buffers=5 to skip potentially invalid first frames from PipeWire
-            cmd = (
-                f"GST_PLUGIN_PATH={GSTPLUGINSPATH} "
-                f"LD_LIBRARY_PATH={DEPSPATH} "
-                f"gst-launch-1.0 -e "
-                f"pipewiresrc do-timestamp=true num-buffers=5 ! "
-                f"videoconvert ! "
-                f"pngenc snapshot=true ! "
-                f"filesink location=\"{screenshot_path}\""
-            )
-            logger.debug(f"GStreamer command: {cmd}")
-
-            for attempt in range(1, MAX_ATTEMPTS + 1):
-                if attempt > 1:
-                    await asyncio.sleep(0.3)
-                    logger.info(f"Retrying screenshot capture (attempt {attempt}/{MAX_ATTEMPTS})")
-
-                if os.path.exists(screenshot_path):
-                    try:
-                        os.remove(screenshot_path)
-                    except OSError as e:
-                        logger.warning(f"Could not remove stale screenshot file: {e}")
-
-                proc = await asyncio.create_subprocess_exec(
-                    'gst-launch-1.0',
-                    '-e',
-                    'pipewiresrc',
-                    'do-timestamp=true',
-                    'num-buffers=5',
-                    '!',
-                    'videoconvert',
-                    '!',
-                    'pngenc',
-                    'snapshot=true',
-                    '!',
-                    'filesink',
-                    f'location={screenshot_path}',
-                    stdout=PIPE,
-                    stderr=PIPE,
-                    env=env
+                # GStreamer pipeline: grab a few frames then EOS
+                # Using num-buffers=5 to skip potentially invalid first frames from PipeWire
+                cmd = (
+                    f"GST_PLUGIN_PATH={GSTPLUGINSPATH} "
+                    f"LD_LIBRARY_PATH={DEPSPATH} "
+                    f"gst-launch-1.0 -e "
+                    f"pipewiresrc do-timestamp=true num-buffers=5 ! "
+                    f"videoconvert ! "
+                    f"pngenc snapshot=true ! "
+                    f"filesink location=\"{screenshot_path}\""
                 )
+                logger.debug(f"GStreamer command: {cmd}")
 
-                timed_out = False
-                try:
-                    out, err = await asyncio.wait_for(proc.communicate(), timeout=2.5)
-                except asyncio.TimeoutError:
-                    timed_out = True
-                    logger.warning(f"Attempt {attempt}: GStreamer timed out after 2.5s, sending SIGINT")
-                    proc.send_signal(signal.SIGINT)
+                for attempt in range(1, MAX_ATTEMPTS + 1):
+                    if attempt > 1:
+                        await asyncio.sleep(0.3)
+                        logger.info(f"Retrying screenshot capture (attempt {attempt}/{MAX_ATTEMPTS})")
+
+                    if os.path.exists(screenshot_path):
+                        try:
+                            os.remove(screenshot_path)
+                        except OSError as e:
+                            logger.warning(f"Could not remove stale screenshot file: {e}")
+
+                    proc = await asyncio.create_subprocess_exec(
+                        'gst-launch-1.0',
+                        '-e',
+                        'pipewiresrc',
+                        'do-timestamp=true',
+                        'num-buffers=5',
+                        '!',
+                        'videoconvert',
+                        '!',
+                        'pngenc',
+                        'snapshot=true',
+                        '!',
+                        'filesink',
+                        f'location={screenshot_path}',
+                        stdout=PIPE,
+                        stderr=PIPE,
+                        env=env
+                    )
+
+                    timed_out = False
                     try:
-                        out, err = await asyncio.wait_for(proc.communicate(), timeout=1)
+                        out, err = await asyncio.wait_for(proc.communicate(), timeout=2.5)
                     except asyncio.TimeoutError:
-                        logger.error(f"Attempt {attempt}: GStreamer did not exit within 1s after SIGINT, killing process")
-                        proc.kill()
-                        out, err = await proc.communicate()
+                        timed_out = True
+                        logger.warning(f"Attempt {attempt}: GStreamer timed out after 2.5s, sending SIGINT")
+                        proc.send_signal(signal.SIGINT)
+                        try:
+                            out, err = await asyncio.wait_for(proc.communicate(), timeout=1)
+                        except asyncio.TimeoutError:
+                            logger.error(f"Attempt {attempt}: GStreamer did not exit within 1s after SIGINT, killing process")
+                            proc.kill()
+                            out, err = await proc.communicate()
 
-                stderr_output = err.decode().strip()
-                if stderr_output:
-                    logger.debug(f"Attempt {attempt}: GStreamer stderr: {stderr_output}")
-                logger.debug(f"Attempt {attempt}: GStreamer return code: {proc.returncode} (timed_out={timed_out})")
+                    stderr_output = err.decode().strip()
+                    if stderr_output:
+                        logger.debug(f"Attempt {attempt}: GStreamer stderr: {stderr_output}")
+                    logger.debug(f"Attempt {attempt}: GStreamer return code: {proc.returncode} (timed_out={timed_out})")
 
-                if not os.path.exists(screenshot_path):
-                    logger.warning(f"Attempt {attempt}: screenshot file not created")
-                    continue
+                    if not os.path.exists(screenshot_path):
+                        logger.warning(f"Attempt {attempt}: screenshot file not created")
+                        continue
 
-                size = os.path.getsize(screenshot_path)
-                if size < MIN_VALID_SIZE:
-                    logger.warning(f"Attempt {attempt}: screenshot too small ({size} bytes, min {MIN_VALID_SIZE}) - likely corrupted frame")
-                    continue
+                    size = os.path.getsize(screenshot_path)
+                    if size < MIN_VALID_SIZE:
+                        logger.warning(f"Attempt {attempt}: screenshot too small ({size} bytes, min {MIN_VALID_SIZE}) - likely corrupted frame")
+                        continue
 
-                base64_data = get_base64_image(screenshot_path)
-                if not base64_data:
-                    logger.warning(f"Attempt {attempt}: base64 encoding failed for {screenshot_path}")
-                    continue
+                    base64_data = get_base64_image(screenshot_path)
+                    if not base64_data:
+                        logger.warning(f"Attempt {attempt}: base64 encoding failed for {screenshot_path}")
+                        continue
 
-                logger.debug(f"Screenshot saved ({size} bytes) on attempt {attempt}")
-                return {"path": screenshot_path, "base64": base64_data}
+                    logger.debug(f"Screenshot saved ({size} bytes) on attempt {attempt}")
+                    return {"path": screenshot_path, "base64": base64_data}
 
-            logger.error(f"Screenshot capture failed after {MAX_ATTEMPTS} attempts")
-            return {"path": "", "base64": ""}
+                logger.error(f"Screenshot capture failed after {MAX_ATTEMPTS} attempts")
+                return {"path": "", "base64": ""}
 
         except Exception as e:
             logger.error(f"Screenshot error: {e}")
             logger.error(traceback.format_exc())
             return {"path": "", "base64": ""}
-
-        finally:
-            _processing_lock = False
 
     async def saveConfig(self):
         try:
@@ -1717,6 +1989,19 @@ class Plugin:
             for i, (src, dst) in enumerate(zip(texts_to_translate, translated_texts)):
                 logger.debug(f"  [{i}] '{src}' -> '{dst}'")
 
+            # Apply literary mode enhancement if enabled (Claude API post-processing)
+            if self._literary_mode and self._claude_api_key:
+                logger.debug("Applying literary mode enhancement with Claude API")
+                enhanced_texts = []
+                for text in translated_texts:
+                    literary_translation = await self._translate_with_claude(text, target_lang)
+                    if literary_translation:
+                        enhanced_texts.append(literary_translation)
+                    else:
+                        # Fallback to standard translation if Claude fails
+                        enhanced_texts.append(text)
+                translated_texts = enhanced_texts
+
             # Merge: use existing translatedText where available, API results for the rest
             translation_iter = iter(translated_texts)
             translated_regions = []
@@ -1741,6 +2026,87 @@ class Plugin:
         except Exception as e:
             logger.error(f"Translation error: {e}")
             logger.error(traceback.format_exc())
+            return None
+
+    async def _translate_with_claude(self, text: str, target_lang: str) -> str:
+        """
+        Translate text using Claude API with literary context.
+        Falls back to raw translation if API call fails.
+        """
+        if not self._claude_api_key or not self._literary_mode:
+            return None
+        
+        try:
+            # Language name mapping for Claude
+            lang_names = {
+                "uk": "Ukrainian",
+                "ru": "Russian",
+                "en": "English",
+                "de": "German",
+                "fr": "French",
+                "es": "Spanish",
+                "it": "Italian",
+                "ja": "Japanese",
+                "zh-CN": "Chinese (Simplified)",
+                "zh-TW": "Chinese (Traditional)",
+                "ko": "Korean",
+            }
+            
+            target_lang_name = lang_names.get(target_lang, target_lang)
+            
+            # System prompt for literary translation
+            system_prompt = (
+                f"You are a literary {target_lang_name} translator for video games. "
+                f"Translate the given text naturally and elegantly — not word-for-word, "
+                f"but how a skilled {target_lang_name} author would write it. "
+                f"Preserve the emotional tone, character voice, and atmosphere. "
+                f"For dramatic moments use vivid language. "
+                f"For casual dialogue use natural spoken {target_lang_name}. "
+                f"Never sound robotic. Return only the translated text, nothing else."
+            )
+            
+            # Call Claude API
+            headers = {
+                "x-api-key": self._claude_api_key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json"
+            }
+            
+            payload = {
+                "model": "claude-3-5-haiku-20241022",
+                "max_tokens": 1024,
+                "system": system_prompt,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": text
+                    }
+                ]
+            }
+            
+            response = requests.post(
+                "https://api.anthropic.com/v1/messages",
+                json=payload,
+                headers=headers,
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result.get("content") and len(result["content"]) > 0:
+                    translated = result["content"][0].get("text", "").strip()
+                    if translated:
+                        logger.debug(f"Claude translation: '{text}' → '{translated}'")
+                        return translated
+            else:
+                logger.warning(f"Claude API error {response.status_code}: {response.text}")
+                return None
+                
+        except requests.Timeout:
+            logger.warning("Claude API request timed out")
+            return None
+        except Exception as e:
+            logger.warning(f"Claude translation failed: {e}")
             return None
 
     async def get_enabled_state(self):
@@ -2017,7 +2383,13 @@ class Plugin:
 
     async def _main(self):
         logger.info("Plugin initialization started")
+        global _processing_semaphore
+        
         try:
+            # Initialize async semaphore for screenshot/processing coordination
+            _processing_semaphore = asyncio.Semaphore(1)
+            logger.info("Async processing semaphore initialized")
+            
             self._settings = SettingsManager(
                 name="decky-translator-settings",
                 settings_directory=settingsDir
@@ -2053,6 +2425,12 @@ class Plugin:
             if gemini_api_key:
                 self._gemini_api_key = gemini_api_key
             self._gemini_model = self._settings.get_setting("gemini_model", "gemini-2.5-flash")
+
+            # Load literary mode settings
+            self._literary_mode = self._settings.get_setting("literary_mode", False)
+            claude_api_key = self._settings.get_setting("claude_api_key", "")
+            if claude_api_key:
+                self._claude_api_key = claude_api_key
 
             saved_ocr_provider = self._settings.get_setting("ocr_provider")
             if saved_ocr_provider is not None:
@@ -2152,12 +2530,58 @@ class Plugin:
                         f"Translation: {provider_status.get('translation_provider', '?')}, "
                         f"Target lang: {self._target_language}")
 
-            # Start hidraw button monitor
+            # Initialize performance benchmarking (Phase 2C)
+            try:
+                self._benchmark = PerformanceBenchmark(name="DecklyTranslator")
+                logger.info("Performance benchmarking system initialized")
+            except Exception as e:
+                logger.warning(f"Failed to initialize benchmarking: {e}")
+                self._benchmark = None
+
+            # Initialize async translation pipeline
+            try:
+                self._pipeline = TranslationPipeline(
+                    provider_manager=self._provider_manager,
+                    frame_queue_size=10,  # ~20MB at 1080p
+                    ocr_timeout=5.0,
+                    translation_timeout=3.0,
+                    name="DecklyTranslatorPipeline",
+                    benchmark=self._benchmark  # Pass benchmark to pipeline
+                )
+                await self._pipeline.start()
+                logger.info("Async translation pipeline initialized and started")
+            except Exception as e:
+                logger.error(f"Failed to initialize async pipeline: {e}")
+                logger.error(traceback.format_exc())
+                self._pipeline = None
+
+            # Start hidraw button monitor (needed for capture worker)
             self._hidraw_monitor = HidrawButtonMonitor()
             if self._hidraw_monitor.start():
                 logger.info("Hidraw button monitor started")
             else:
                 logger.warning("Failed to start hidraw button monitor")
+
+            # Initialize continuous frame capture worker (Phase 2C)
+            try:
+                if self._pipeline and self._hidraw_monitor:
+                    self._capture_worker = ContinuousCaptureWorker(
+                        pipeline=self._pipeline,
+                        get_screenshot_func=self.take_screenshot,
+                        get_button_state_func=self._hidraw_monitor.get_button_state,
+                        get_cpu_usage_func=None,  # CPU monitoring handled internally by worker
+                        mode=CaptureMode.BUTTON_TRIGGERED,
+                        trigger_button="L4",
+                        target_fps=3
+                    )
+                    self._capture_task = asyncio.create_task(self._capture_worker.run())
+                    self._cpu_usage_task = None  # CPU monitoring runs inside capture worker
+                    logger.info("Continuous capture worker initialized and started")
+            except Exception as e:
+                logger.warning(f"Failed to initialize continuous capture worker: {e}")
+                self._capture_worker = None
+                self._capture_task = None
+                self._cpu_usage_task = None
 
             # Start evdev monitor for external gamepads
             if EVDEV_AVAILABLE:
@@ -2177,6 +2601,44 @@ class Plugin:
     async def _unload(self):
         logger.info("Unloading plugin")
         try:
+            # Stop continuous capture worker (Phase 2C)
+            if self._capture_worker:
+                try:
+                    await self._capture_worker.stop()
+                    logger.info("Continuous capture worker stopped")
+                except Exception as e:
+                    logger.error(f"Error stopping capture worker: {e}")
+                self._capture_worker = None
+            
+            if self._capture_task:
+                try:
+                    await asyncio.wait_for(self._capture_task, timeout=2.0)
+                except asyncio.TimeoutError:
+                    self._capture_task.cancel()
+                except Exception:
+                    pass
+                self._capture_task = None
+
+            # Stop CPU usage monitor task
+            if self._cpu_usage_task:
+                try:
+                    self._cpu_usage_task.cancel()
+                    await asyncio.wait_for(self._cpu_usage_task, timeout=1.0)
+                except (asyncio.TimeoutError, asyncio.CancelledError):
+                    pass
+                except Exception:
+                    pass
+                self._cpu_usage_task = None
+
+            # Stop async pipeline
+            if self._pipeline:
+                try:
+                    await self._pipeline.stop()
+                    logger.info("Async translation pipeline stopped")
+                except Exception as e:
+                    logger.error(f"Error stopping pipeline: {e}")
+                self._pipeline = None
+
             if self._provider_manager:
                 self._provider_manager.shutdown()
 
