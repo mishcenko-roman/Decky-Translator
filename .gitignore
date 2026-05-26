@@ -75,6 +75,19 @@ dependencies_build/
 out/
 cli/
 
+# Model files (prevent accidental commits of large ML models)
+*.onnx
+*.bin
+*.pt
+*.safetensors
+*.pb
+*.pth
+
+# Python environments
+.venv/
+venv/
+env/
+
 # Local files
 /docs
 /nul
