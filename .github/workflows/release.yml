@@ -38,7 +38,9 @@ jobs:
             main.py \
             plugin.json \
             package.json \
-            py_modules/
+            py_modules/ \
+            LICENSE \
+            README.md
           ls -lh Decky-Translator.zip
 
       - name: Get version from git tag or commit
