@@ -33,14 +33,10 @@ jobs:
 
       - name: Create plugin zip
         run: |
-          zip -r Decky-Translator.zip \
-            dist/ \
-            main.py \
-            plugin.json \
-            package.json \
-            py_modules/ \
-            LICENSE \
-            README.md
+          mkdir -p Decky-Translator
+          cp -r dist main.py plugin.json package.json py_modules LICENSE README.md Decky-Translator/
+          zip -r Decky-Translator.zip Decky-Translator/
+          rm -rf Decky-Translator
           ls -lh Decky-Translator.zip
 
       - name: Get version from git tag or commit
