@@ -246,7 +246,7 @@ export class GameTranslatorLogic {
     async pauseCurrentGame(): Promise<void> {
         try {
             // Get the current running app ID
-            const mainApp = Router.MainRunningApp;
+            const mainApp = (Router as any)?.MainRunningApp;
             if (!mainApp || !mainApp.appid) {
                 logger.debug('Translator', 'No game running to pause');
                 return;
@@ -277,7 +277,7 @@ export class GameTranslatorLogic {
     async resumeCurrentGame(): Promise<void> {
         try {
             // Get the current running app ID
-            const mainApp = Router.MainRunningApp;
+            const mainApp = (Router as any)?.MainRunningApp;
             if (!mainApp || !mainApp.appid) {
                 logger.debug('Translator', 'No game running to resume');
                 return;
@@ -368,7 +368,7 @@ export class GameTranslatorLogic {
             this.isProcessing = true;
 
             // Take screenshot FIRST while screen is clean (no overlay visible)
-            const appName = Router.MainRunningApp?.display_name || "";
+            const appName = (Router as any)?.MainRunningApp?.display_name || "";
             logger.info('Translator', `Taking new screenshot for: ${appName}`);
             const result = await call<[string], ScreenshotResponse>('take_screenshot', appName);
 

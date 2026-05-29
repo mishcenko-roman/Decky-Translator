@@ -1,6 +1,7 @@
 import type { DropdownOption } from "@decky/ui";
 import { createElement, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { HiLockClosed } from "react-icons/hi2";
+// Inline SVG for lock icon
+const IconLocked = () => <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/></svg>;
 import { isDyslexiaFont, getDyslexiaFontsForLanguage, getAllDyslexiaFontNames, getDyslexiaFontAvailableFor, loadDyslexiaFont, preloadDyslexiaFonts } from "./dyslexiaFonts";
 import { getWebFontsForLanguage, isWebFont, loadGoogleFont, preloadWebFontList } from "./webFonts";
 
@@ -158,7 +159,7 @@ export function useFontOptions(selectedFontFamily: string, targetLanguage: strin
             createElement(
                 'span',
                 { style: { opacity: 0.45, fontSize: '0.85em', fontFamily: `${quoteFontName(fontFamily)}, sans-serif` } },
-                createElement(HiLockClosed, { style: { marginRight: 6, verticalAlign: '-0.125em' } }),
+                createElement(IconLocked, { style: { marginRight: 6, verticalAlign: '-0.125em' } }),
                 fontFamily,
                 createElement(
                     'span',

@@ -12,10 +12,16 @@ import {
 } from "@decky/ui";
 
 import { VFC } from "react";
-import { BsTranslate, BsXLg, BsEye, BsStars } from "react-icons/bs";
-import { SiKofi } from "react-icons/si";
-import { HiQrCode, HiInboxArrowDown } from "react-icons/hi2";
 import showQrModal from "../showQrModal";
+
+// Inline SVG icons
+const IconTranslate = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12.87 15.07l-2.54-2.51.03-.03A17.52 17.52 0 0114.07 6H17V4h-7V2H8v2H1v2h11.17A15.4 15.4 0 018.87 12a15.4 15.4 0 01-2.44-4H4.3a17.38 17.38 0 003.08 5.22l-5.3 5.25 1.42 1.42L9 14.4l3.11 3.11.76-2.44zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2l-4.5-12zm-2.62 7l1.62-4.33L19.12 17h-3.24z"/></svg>;
+const IconClose = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z"/></svg>;
+const IconEye = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>;
+const IconStars = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2l-2.81 6.63L2 9.24l5.46 4.73L5.82 21 12 17.27z"/></svg>;
+const IconDownload = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>;
+const IconKofi = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 9.5c0 .83-.67 1.5-1.5 1.5S11 13.33 11 12.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5z"/></svg>;
+const IconQrCode = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M3 11h8V3H3v8zm2-6h4v4H5V5zm8-2v8h8V3h-8zm6 6h-4V5h4v4zM3 21h8v-8H3v8zm2-6h4v4H5v-4zm13-2h-2v3h-3v2h3v3h2v-3h3v-2h-3v-3z"/></svg>;
 import { useSettings } from "../SettingsContext";
 import { GameTranslatorLogic } from "../Translator";
 import { logger } from "../Logger";
@@ -103,7 +109,7 @@ export const TabMain: VFC<TabMainProps> = ({ logic, overlayVisible, providerStat
     const handleButtonClick = () => {
         if (overlayVisible) {
             logic.dismiss();
-            Router.CloseSideMenus();
+            (Router as any)?.CloseSideMenus?.();
             return;
         }
         if (ocrNeedsDownload) {
@@ -116,7 +122,7 @@ export const TabMain: VFC<TabMainProps> = ({ logic, overlayVisible, providerStat
             return;
         }
         // Close menu first, then wait for UI to fully close before taking screenshot
-        Router.CloseSideMenus();
+        (Router as any)?.CloseSideMenus?.();
         setTimeout(() => {
             logic.takeScreenshotAndTranslate().catch(err => logger.error('TabMain', 'Screenshot failed', err));
         }, 200);
@@ -124,12 +130,12 @@ export const TabMain: VFC<TabMainProps> = ({ logic, overlayVisible, providerStat
 
     const renderButtonContent = () => {
         if (overlayVisible) {
-            return <span style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}><BsXLg /> Close Overlay</span>;
+            return <span style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}><IconClose /> Close Overlay</span>;
         }
         if (ocrNeedsDownload || translationNeedsDownload) {
-            return <span style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}><HiInboxArrowDown size={20} /> Download required</span>;
+            return <span style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}><IconDownload /> Download required</span>;
         }
-        return <span style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}><BsTranslate /> Translate</span>;
+        return <span style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}><IconTranslate /> Translate</span>;
     };
 
     return (
@@ -160,14 +166,14 @@ export const TabMain: VFC<TabMainProps> = ({ logic, overlayVisible, providerStat
                             <div style={{ fontSize: '12px', marginTop: '8px' }}>
                                 {settings.ocrProvider === 'gemini_vision' && (
                                     <div style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
-                                        <BsStars style={{ marginRight: '8px', color: '#aaa' }} />
+                                        <span style={{ marginRight: '8px', color: '#aaa', display: 'flex' }}><IconStars /></span>
                                         <span style={{ color: '#888' }}>Recognize + Translate:</span>
                                         <span style={{ marginLeft: '6px', fontWeight: 'bold' }}>Gemini</span>
                                     </div>
                                 )}
                                 {settings.ocrProvider !== 'gemini_vision' && (
                                     <div style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
-                                        <BsEye style={{ marginRight: '8px', color: '#aaa' }} />
+                                        <span style={{ marginRight: '8px', color: '#aaa', display: 'flex' }}><IconEye /></span>
                                         <span style={{ color: '#888' }}>Text Recognition:</span>
                                         <span style={{ marginLeft: '6px', fontWeight: 'bold' }}>
                                             {settings.ocrProvider === 'chromescreenai' ? 'On-Device' :
@@ -316,7 +322,7 @@ export const TabMain: VFC<TabMainProps> = ({ logic, overlayVisible, providerStat
                                 )}
                                 {settings.ocrProvider !== 'gemini_vision' && (
                                     <div style={{ display: 'flex', alignItems: 'center', marginBottom: '2px' }}>
-                                        <BsTranslate style={{ marginRight: '8px', color: '#aaa' }} />
+                                        <span style={{ marginRight: '8px', color: '#aaa', display: 'flex' }}><IconTranslate /></span>
                                         <span style={{ color: '#888' }}>Translation:</span>
                                         <span style={{ marginLeft: '6px', fontWeight: 'bold' }}>
                                             {settings.translationProvider === 'googlecloud' ? 'Google Cloud' :
@@ -382,8 +388,20 @@ export const TabMain: VFC<TabMainProps> = ({ logic, overlayVisible, providerStat
                         <Focusable>
                             <DialogButton
                                 onClick={() => {
-                                    Navigation.CloseSideMenus();
-                                    Navigation.NavigateToExternalWeb('https://ko-fi.com/alexanderdev');
+                                    // Safe wrapper for Navigation API (may not be available in all Decky versions)
+                                    try {
+                                        (Navigation as any)?.CloseSideMenus?.();
+                                    } catch (e) {
+                                        console.error("Failed to close side menus:", e);
+                                    }
+                                    
+                                    // Navigate to external web with fallback to window.open
+                                    const url = 'https://ko-fi.com/alexanderdev';
+                                    if ((Navigation as any)?.NavigateToExternalWeb) {
+                                        (Navigation as any).NavigateToExternalWeb(url);
+                                    } else {
+                                        window.open(url, '_blank');
+                                    }
                                 }}
                                 onSecondaryButton={() => showQrModal('https://ko-fi.com/alexanderdev')}
                                 onSecondaryActionDescription="Show QR Code"
@@ -396,9 +414,9 @@ export const TabMain: VFC<TabMainProps> = ({ logic, overlayVisible, providerStat
                                     minWidth: 'auto',
                                 }}
                             >
-                                <SiKofi style={{ fontSize: '13px' }} />
+                                <span style={{ fontSize: '13px' }}><IconKofi /></span>
                                 <span>Support on Ko-fi</span>
-                                <HiQrCode style={{ fontSize: '13px', opacity: 0.6 }} />
+                                <span style={{ fontSize: '13px', opacity: 0.6 }}><IconQrCode /></span>
                             </DialogButton>
                         </Focusable>
                     </div>

@@ -21,7 +21,6 @@ import {
     useCallback
 } from "react";
 
-import { BsTranslate } from "react-icons/bs";
 import { ImageState, ImageOverlay } from "./Overlay";
 import { GameTranslatorLogic } from "./Translator";
 import { cleanupAllFontDOM } from "./fonts";
@@ -338,7 +337,7 @@ export default definePlugin(() => {
     return {
         title: <div className={staticClasses.Title}>Decky Translator</div>,
         content: <TranslatorApp logic={logic}/>,
-        icon: <BsTranslate/>,
+        icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M12.87 15.07l-2.54-2.51.03-.03A17.52 17.52 0 0114.07 6H17V4h-7V2H8v2H1v2h11.17A15.4 15.4 0 018.87 12a15.4 15.4 0 01-2.44-4H4.3a17.38 17.38 0 003.08 5.22l-5.3 5.25 1.42 1.42L9 14.4l3.11 3.11.76-2.44zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2l-4.5-12zm-2.62 7l1.62-4.33L19.12 17h-3.24z"/></svg>,
         onDismount() {
             // Clean up resources
             logic.cleanup();

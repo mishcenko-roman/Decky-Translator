@@ -11,23 +11,31 @@ enum UIComposition {
 }
 
 // Hook into Decky's UI composition to ensure our indicator renders above the game or overlay
-const useUIComposition: (composition: UIComposition) => void = findModuleChild(
-    (m) => {
-        if (typeof m !== "object") return undefined;
-        for (let prop in m) {
-            const fn = (m as any)[prop];
-            if (
-                typeof fn === "function" &&
-                fn.toString().includes("AddMinimumCompositionStateRequest") &&
-                fn.toString().includes("ChangeMinimumCompositionStateRequest") &&
-                fn.toString().includes("RemoveMinimumCompositionStateRequest") &&
-                !fn.toString().includes("m_mapCompositionStateRequests")
-            ) {
-                return fn;
+// Wrapped in try-catch for Decky v3.2.3 compatibility - fallback to no-op if API unavailable
+const useUIComposition: (composition: UIComposition) => void = (() => {
+    try {
+        return findModuleChild(
+            (m) => {
+                if (typeof m !== "object") return undefined;
+                for (let prop in m) {
+                    const fn = (m as any)[prop];
+                    if (
+                        typeof fn === "function" &&
+                        fn.toString().includes("AddMinimumCompositionStateRequest") &&
+                        fn.toString().includes("ChangeMinimumCompositionStateRequest") &&
+                        fn.toString().includes("RemoveMinimumCompositionStateRequest") &&
+                        !fn.toString().includes("m_mapCompositionStateRequests")
+                    ) {
+                        return fn;
+                    }
+                }
             }
-        }
+        ) || (() => {});  // Return no-op if not found
+    } catch (e) {
+        console.error("Failed to initialize UI composition hook:", e);
+        return () => {};  // Fallback to no-op function
     }
-);
+})();
 
 interface ActivationIndicatorProps {
     visible: boolean;

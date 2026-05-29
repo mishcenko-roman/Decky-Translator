@@ -33,22 +33,29 @@ enum UIComposition {
     OverlayKeyboard = 4,
 }
 
-const useUIComposition: (composition: UIComposition) => void = findModuleChild(
-    (m) => {
-        if (typeof m !== "object") return undefined;
-        for (let prop in m) {
-            if (
-                typeof m[prop] === "function" &&
-                m[prop].toString().includes("AddMinimumCompositionStateRequest") &&
-                m[prop].toString().includes("ChangeMinimumCompositionStateRequest") &&
-                m[prop].toString().includes("RemoveMinimumCompositionStateRequest") &&
-                !m[prop].toString().includes("m_mapCompositionStateRequests")
-            ) {
-                return m[prop];
+const useUIComposition: (composition: UIComposition) => void = (() => {
+    try {
+        return findModuleChild(
+            (m) => {
+                if (typeof m !== "object") return undefined;
+                for (let prop in m) {
+                    if (
+                        typeof m[prop] === "function" &&
+                        m[prop].toString().includes("AddMinimumCompositionStateRequest") &&
+                        m[prop].toString().includes("ChangeMinimumCompositionStateRequest") &&
+                        m[prop].toString().includes("RemoveMinimumCompositionStateRequest") &&
+                        !m[prop].toString().includes("m_mapCompositionStateRequests")
+                    ) {
+                        return m[prop];
+                    }
+                }
             }
-        }
+        ) || (() => {});  // Return no-op if not found
+    } catch (e) {
+        console.error("Failed to initialize UI composition hook:", e);
+        return () => {};  // Fallback to no-op function
     }
-);
+})();
 
 // Mountable component that holds a composition state request.
 // When unmounted, the hook cleanup calls RemoveMinimumCompositionStateRequest,
@@ -1048,13 +1055,19 @@ export const ImageOverlay: VFC<{ state: ImageState, onDismiss: () => void }> = (
 
         state.onStateChanged(handleStateChanged);
 
-        const suspend_register = SteamClient.User.RegisterForPrepareForSystemSuspendProgress(() => {
-            onDismiss();
-        });
+        // Safe wrapper for SteamClient suspend registration (may not be available in all Decky versions)
+        let suspend_register: { unregister: () => void } | null = null;
+        try {
+            suspend_register = (SteamClient as any)?.User?.RegisterForPrepareForSystemSuspendProgress?.(() => {
+                onDismiss();
+            });
+        } catch (e) {
+            console.error("Failed to register for system suspend progress:", e);
+        }
 
         return () => {
             state.offStateChanged(handleStateChanged);
-            suspend_register.unregister();
+            suspend_register?.unregister?.();
         };
     }, [state, onDismiss]);
 

@@ -18,8 +18,15 @@ import {
 import { VFC, useState, useEffect, useRef, useCallback, RefObject } from "react";
 import { call } from "@decky/api";
 import { useSettings } from "../SettingsContext";
-import { HiKey, HiLockClosed, HiInboxArrowDown, HiTrash, HiXMark } from "react-icons/hi2";
-import { BsArrowRepeat, BsStars } from "react-icons/bs";
+
+// Inline SVG icons
+const IconKey = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12.65 10C11.83 7.75 9.68 6 7 6c-3.31 0-6 2.69-6 6s2.69 6 6 6c2.68 0 4.83-1.75 5.65-4H17v4h4v-4h2v-4H12.65zM7 14c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"/></svg>;
+const IconLocked = () => <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/></svg>;
+const IconDownload = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>;
+const IconTrash = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-9l-1 1H5v2h14V4z"/></svg>;
+const IconClose = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z"/></svg>;
+const IconRefresh = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M1 4v6h6M23 20v-6h-6" /><path d="M20.3 5.51C18.52 3.71 16.04 2.5 13.3 2.5c-5.01 0-9.09 3.71-9.84 8.5H1c.75-5.3 5.47-9.5 12.3-9.5 3.13 0 6.06 1.08 8.4 2.88L23 2v8H15l5.3-4.49z"/></svg>;
+const IconStars = () => <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2l-2.81 6.63L2 9.24l5.46 4.73L5.82 21 12 17.27z"/></svg>;
 
 // @ts-ignore
 import ocrspaceLogo from "../../assets/ocrspace-logo.png";
@@ -824,7 +831,7 @@ export const TabTranslation: VFC<TabTranslationProps> = ({ scrollTarget, onScrol
                         {settings.ocrProvider === 'gemini_vision' ? (
                             <Dropdown
                                 rgOptions={[
-                                    { label: <span style={{ display: "flex", alignItems: "center", gap: "6px", height: "20px", lineHeight: "20px" }}><HiLockClosed style={{ fontSize: "12px", color: "#888" }} /> Gemini Vision <BsStars style={{ fontSize: "12px" }} /></span>, data: "gemini_vision" }
+                                    { label: <span style={{ display: "flex", alignItems: "center", gap: "6px", height: "20px", lineHeight: "20px" }}><span style={{ fontSize: "12px", color: "#888" }}><IconLocked /></span> Gemini Vision <span style={{ fontSize: "12px" }}><IconStars /></span></span>, data: "gemini_vision" }
                                 ]}
                                 selectedOption="gemini_vision"
                                 disabled={true}
