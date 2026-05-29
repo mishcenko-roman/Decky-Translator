@@ -1,4 +1,4 @@
-import { VFC } from "react";
+import { FC } from "react";
 import { findModuleChild } from "@decky/ui";
 
 // UI Composition layers provided by Decky
@@ -46,12 +46,12 @@ interface ActivationIndicatorProps {
 
 // Mountable component that holds a composition state request.
 // When unmounted, the hook cleanup removes the request entirely.
-const CompositionRequest: VFC<{ level: UIComposition }> = ({ level }) => {
+const CompositionRequest: FC<{ level: UIComposition }> = ({ level }) => {
     useUIComposition(level);
     return null;
 };
 
-export const ActivationIndicator: VFC<ActivationIndicatorProps> = ({ visible, progress, text, forDismiss }) => {
+export const ActivationIndicator: FC<ActivationIndicatorProps> = ({ visible, progress, text, forDismiss }) => {
     const layer = forDismiss ? UIComposition.Overlay : UIComposition.Notification;
 
     const size = 36;

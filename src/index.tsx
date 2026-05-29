@@ -14,7 +14,7 @@ import {
 } from "@decky/ui";
 
 import {
-    VFC,
+    FC,
     useState,
     useEffect,
     useRef,
@@ -52,7 +52,7 @@ const IconGear = () => (
 );
 
 // Main plugin component
-const GameTranslator: VFC<{ logic: GameTranslatorLogic }> = ({ logic }) => {
+const GameTranslator: FC<{ logic: GameTranslatorLogic }> = ({ logic }) => {
     const { settings, initialized } = useSettings();
     const [overlayVisible, setOverlayVisible] = useState<boolean>(logic.isOverlayVisible());
     const [inputDiagnostics, setInputDiagnostics] = useState<any>(null);
@@ -224,7 +224,7 @@ const GameTranslator: VFC<{ logic: GameTranslatorLogic }> = ({ logic }) => {
 };
 
 // Activation Indicator component
-const HoldActivationIndicator: VFC<{ logic: GameTranslatorLogic }> = ({logic}) => {
+const HoldActivationIndicator: FC<{ logic: GameTranslatorLogic }> = ({logic}) => {
     const {settings} = useSettings();
     const [progressInfo, setProgressInfo] = useState<ProgressInfo>({
         active: false,
@@ -299,7 +299,7 @@ const HoldActivationIndicator: VFC<{ logic: GameTranslatorLogic }> = ({logic}) =
 };
 
 // Main App wrapped with Settings provider
-const TranslatorApp: VFC<{ logic: GameTranslatorLogic }> = ({ logic }) => {
+const TranslatorApp: FC<{ logic: GameTranslatorLogic }> = ({ logic }) => {
     return (
         <SettingsProvider logic={logic}>
             <GameTranslator logic={logic}/>
@@ -308,7 +308,7 @@ const TranslatorApp: VFC<{ logic: GameTranslatorLogic }> = ({ logic }) => {
 };
 
 // Indicator wrapped with Settings provider
-const ActivationIndicatorWithSettings: VFC<{ logic: GameTranslatorLogic }> = ({ logic }) => {
+const ActivationIndicatorWithSettings: FC<{ logic: GameTranslatorLogic }> = ({ logic }) => {
     return (
         <SettingsProvider logic={logic}>
             <HoldActivationIndicator logic={logic}/>

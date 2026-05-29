@@ -1,7 +1,7 @@
 import type { DropdownOption } from "@decky/ui";
 import { createElement, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-// Inline SVG for lock icon
-const IconLocked = () => <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/></svg>;
+// Inline SVG for lock icon - using createElement to avoid JSX syntax  
+const IconLocked = () => createElement('svg', { width: 12, height: 12, viewBox: '0 0 24 24', fill: 'currentColor' }, createElement('path', { d: 'M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z' }));
 import { isDyslexiaFont, getDyslexiaFontsForLanguage, getAllDyslexiaFontNames, getDyslexiaFontAvailableFor, loadDyslexiaFont, preloadDyslexiaFonts } from "./dyslexiaFonts";
 import { getWebFontsForLanguage, isWebFont, loadGoogleFont, preloadWebFontList } from "./webFonts";
 
@@ -240,3 +240,4 @@ export function loadRemoteFont(fontName: string): Promise<boolean> {
     if (isWebFont(fontName)) return loadGoogleFont(fontName);
     return Promise.resolve(false);
 }
+
